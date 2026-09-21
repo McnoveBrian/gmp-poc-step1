@@ -1,0 +1,36 @@
+<Project Sdk="Nice3point.Revit.Sdk/6.2.3">
+
+  <PropertyGroup>
+    <DeployAddin>true</DeployAddin>
+    <LaunchRevit>false</LaunchRevit>
+    <IsRepackable>false</IsRepackable>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>GmpPlatform.Revit</RootNamespace>
+    <AssemblyName>GmpPlatform.Revit</AssemblyName>
+    <Description>GMP Production Platform — Revit add-in (demo; primary target Revit 2025)</Description>
+    <Configurations>Debug.R24;Release.R24;Debug.R25;Release.R25</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GmpPlatform.Core\GmpPlatform.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Avoid WinForms types colliding with Revit API (View, Form, TaskDialog). -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\Icons\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*" />
+    <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
+    <PackageReference Include="JetBrains.Annotations" Version="2026.2.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

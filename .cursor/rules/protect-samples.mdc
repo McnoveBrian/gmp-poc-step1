@@ -1,0 +1,27 @@
+---
+description: Never delete or overwrite original files in samples/
+alwaysApply: true
+---
+
+# Protect samples/ originals
+
+Under **no circumstances** delete, move-replace, overwrite, truncate, or clean up original files in `samples/` (case-insensitive: `Samples`, `SAMPLES`, etc.).
+
+Protected originals include at minimum:
+- `samples/45431_Pilgrims RTE Main Plant R25.rvt`
+- `samples/45430_AFIP1035.pdf`
+- `samples/45430_AFIP1035.dwg`
+
+## Allowed
+
+- **Read** / inspect originals
+- **Copy** originals into other folders (e.g. `deliverables/`, working dirs) if needed
+
+## Forbidden
+
+- `Remove-Item`, `rm`, `del`, or any delete on `samples/**`
+- Renaming or restructuring that risks Windows case-collision (`Samples` vs `samples`)
+- Deleting a parent folder that contains `samples/`
+- "Cleanup" that touches `samples/` without explicit user approval naming each file
+
+If reorganization is needed, **copy** out — never delete the source in `samples/`.

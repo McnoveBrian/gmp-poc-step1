@@ -1,0 +1,22 @@
+We're looking for a skilled developer proficient in Python and C# with in-depth knowledge of Autodesk Revit to join our team and help us automate the drafting process.
+
+Responsibilities:
+Develop and implement automation features for drafting processes in Autodesk Revit.
+Collaborate with architects, designers, and engineers to understand and address their needs.
+Optimize existing Revit workflows and create custom scripts to enhance efficiency.
+Troubleshoot and resolve technical issues related to Revit automation.
+
+Requirements:
+Proficiency in Python and C# programming languages.
+Strong knowledge of Autodesk Revit, including its API.
+Experience in developing automation solutions for Revit.
+Excellent problem-solving skills and attention to detail.
+Ability to work independently and as part of a team.
+Strong communication skills.
+
+Preferred Qualifications:
+Experience with Dynamo for Revit.
+Familiarity with Building Information Modeling (BIM) workflows.
+
+Flexible Work Arrangements:
+Possibility to work as a side/additional job to fit your schedule.

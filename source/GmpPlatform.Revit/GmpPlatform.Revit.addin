@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>GMP Production Platform</Name>
+    <Assembly>GmpPlatform.Revit\GmpPlatform.Revit.dll</Assembly>
+    <AddInId>C7A91E2B-4F58-4D0A-9E33-8B1C6D2A7F10</AddInId>
+    <FullClassName>GmpPlatform.Revit.Application</FullClassName>
+    <VendorId>GMP</VendorId>
+    <VendorDescription>GMP Architecture LLC — Precast shop ticket automation</VendorDescription>
+  </AddIn>
+</RevitAddIns>

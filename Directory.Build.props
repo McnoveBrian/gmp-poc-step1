@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <Company>GMP Architecture LLC</Company>
+    <Authors>Brian</Authors>
+    <Product>GMP Production Platform</Product>
+    <Copyright>Copyright © GMP Architecture LLC</Copyright>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <LangVersion>latest</LangVersion>
+    <Version>0.1.0-demo</Version>
+  </PropertyGroup>
+</Project>
