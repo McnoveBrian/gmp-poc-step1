@@ -39,8 +39,8 @@ public class GenerateWallShopTicketCommand : ExternalCommand
                 $"Type: {snapshot.TypeName}\n" +
                 $"Size (ft): L={snapshot.LengthFt:0.###}  H={snapshot.HeightFt:0.###}  T={snapshot.ThicknessFt:0.###}\n" +
                 $"Title block: {titleBlockLabel}\n\n" +
-                $"Creates 3 sheets (TIF / BIF / Sections+BOM) with sandwich outlines, " +
-                $"non-overlapping notes/sections, and the title block from Settings.\n\n" +
+                $"Creates 3 sheets (TIF / BIF / Sections+BOM), opens them for review, " +
+                $"and uses auto-sized text notes.\n\n" +
                 (titleBlockId == Autodesk.Revit.DB.ElementId.InvalidElementId
                     ? "Tip: use Shop Tickets → Settings to pick a title block before generating.\n\n"
                     : "") +
@@ -63,10 +63,13 @@ public class GenerateWallShopTicketCommand : ExternalCommand
             var reportFolder = RunReportWriter.Write(plan, result);
             result.ReportPath = reportFolder;
 
+            // Open every new sheet as a tab so the user can review immediately.
+            SheetNavigator.OpenSheets(uidoc, result.CreatedSheetIds);
+
             TaskDialog.Show(
                 "GMP Platform — Done",
                 $"{result.Message}\n\n" +
-                $"Sheets:\n• {string.Join("\n• ", result.CreatedSheetNames)}\n\n" +
+                $"Sheets (opened for review):\n• {string.Join("\n• ", result.CreatedSheetNames)}\n\n" +
                 $"Report:\n{reportFolder}");
         }
         catch (Exception ex)

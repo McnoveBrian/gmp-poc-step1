@@ -33,15 +33,19 @@ Close Revit before rebuilding if the DLL is locked.
 
 ---
 
-## 3. Choose a title block (recommended)
+## 3. Choose a title block and scale (recommended)
 
 1. Open the target Revit model (so its title-block families are available).  
 2. **GMP Platform → Shop Tickets → Settings**.  
 3. Pick the title-block family/type that should appear on generated sheets.  
-4. Optionally adjust **note clearance** and **section cell gap** (larger = less overlap).  
-5. Click **Save**.
+4. Set **View scale** to **Auto-fit to sheet** (default) or a fixed scale such as 1/4"=1'-0".  
+5. Optionally adjust **note clearance** and **section cell gap**.  
+6. Leave **Apply title block to all existing shop-ticket sheets now** checked so every prior GMP sheet updates (not only the last one).  
+7. Click **Save**.
 
 Settings are stored at `%ProgramData%\GMP\Platform\config\settings.json`.
+
+When you change the title block later, Save with the apply checkbox on — the add-in replaces the title-block instance on **each** shop-ticket sheet.
 
 ---
 
@@ -60,6 +64,8 @@ Settings are stored at `%ProgramData%\GMP\Platform\config\settings.json`.
 | `{Mark}-1` TIF | Sandwich panel elevation outline, opening, side thickness strip, joint callout; notes in a clear left column; live section viewport when creation succeeds; selected title block |
 | `{Mark}-2` BIF | Finish elevation with reveal, same outline treatment and non-overlapping notes; selected title block |
 | `{Mark}-3` SECTIONS | AFIP-style sandwich section cells (A/B/C/…) in a spaced grid, BOM column to the right; selected title block |
+
+After generation, **all three sheets open as tabs** (TIF left active) so you can review them immediately. Text notes are **auto-sized** to the content (unwrapped) — they no longer use oversized fixed widths.
 
 Also created:
 
@@ -123,8 +129,9 @@ GMP Platform
 ├── Shop Tickets
 │   ├── Wall Ticket     Generate 3-sheet package (title block + outlines)
 │   ├── Export DWG      Export active sheet/view
-│   └── Settings        Title block + layout clearances
+│   └── Settings        Title block (apply to all sheets) + scale + clearances
 └── Help
     ├── About           Version and data paths
-    └── Reports         Open reports folder
+    ├── Reports         Open reports folder
+    └── Verify          Generate + check title blocks/scales
 ```

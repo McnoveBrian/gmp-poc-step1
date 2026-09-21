@@ -10,11 +10,23 @@ public sealed class PlatformSettings
     public string? TitleBlockFamilyAndType { get; set; }
 
     /// <summary>Clearance (ft, drafting space) between panel geometry and note columns.</summary>
-    public double NoteClearanceFt { get; set; } = 1.0;
+    public double NoteClearanceFt { get; set; } = 1.5;
 
     /// <summary>Clearance (ft) between neighboring section cells on the sections sheet.</summary>
-    public double SectionCellGapFt { get; set; } = 1.5;
+    public double SectionCellGapFt { get; set; } = 2.0;
 
-    /// <summary>Fraction of sheet width reserved on the right for the title-block column.</summary>
-    public double TitleBlockRightReserve { get; set; } = 0.28;
+    /// <summary>Fraction of sheet width reserved on the right for the title-block column (fallback).</summary>
+    public double TitleBlockRightReserve { get; set; } = 0.30;
+
+    /// <summary>
+    /// Drafting/section view scale. 0 = auto-fit to the sheet printable area.
+    /// Common values: 96 (1/8"), 48 (1/4"), 24 (1/2"), 12 (1").
+    /// </summary>
+    public int ViewScale { get; set; } = 0;
+
+    /// <summary>When saving Settings, replace title blocks on existing GMP shop-ticket sheets.</summary>
+    public bool ApplyTitleBlockToExistingSheets { get; set; } = true;
+
+    /// <summary>Margin (sheet feet) inset from the printable content area.</summary>
+    public double SheetMarginFt { get; set; } = 0.25;
 }

@@ -61,6 +61,8 @@ public sealed class ShopTicketRunResult
     public string Message { get; set; } = "";
     public IReadOnlyList<string> CreatedSheetNames { get; set; } = Array.Empty<string>();
     public IReadOnlyList<string> CreatedViewNames { get; set; } = Array.Empty<string>();
+    /// <summary>Element ids of sheets created in this run (for opening tabs after generation).</summary>
+    public IReadOnlyList<long> CreatedSheetIds { get; set; } = Array.Empty<long>();
     public string? ReportPath { get; set; }
     public string? ExportFolder { get; set; }
 }

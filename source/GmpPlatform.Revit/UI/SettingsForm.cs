@@ -5,14 +5,18 @@ using WinForms = System.Windows.Forms;
 
 namespace GmpPlatform.Revit.UI;
 
-/// <summary>Simple picker for the shop-ticket title block and layout clearances.</summary>
+/// <summary>Shop-ticket settings: title block, scale, clearances, apply-to-existing sheets.</summary>
 internal sealed class SettingsForm : WinForms.Form
 {
     private readonly Document _doc;
     private readonly WinForms.ComboBox _titleBlocks;
+    private readonly WinForms.ComboBox _viewScale;
     private readonly WinForms.NumericUpDown _noteClearance;
     private readonly WinForms.NumericUpDown _sectionGap;
+    private readonly WinForms.CheckBox _applyExisting;
     private readonly WinForms.Label _pathLabel;
+
+    public bool ApplyToExistingSheets { get; private set; }
 
     public SettingsForm(Document doc)
     {
@@ -25,12 +29,12 @@ internal sealed class SettingsForm : WinForms.Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = WinForms.FormStartPosition.CenterScreen;
-        ClientSize = new System.Drawing.Size(520, 280);
+        ClientSize = new System.Drawing.Size(540, 360);
         Font = new System.Drawing.Font("Segoe UI", 9f);
 
         var titleLabel = new WinForms.Label
         {
-            Text = "Title block for generated shop-ticket sheets",
+            Text = "Title block for shop-ticket sheets",
             AutoSize = true,
             Location = new System.Drawing.Point(16, 16)
         };
@@ -39,7 +43,7 @@ internal sealed class SettingsForm : WinForms.Form
         {
             DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             Location = new System.Drawing.Point(16, 40),
-            Width = 480,
+            Width = 500,
             DisplayMember = nameof(TitleBlockOption.DisplayName)
         };
         _titleBlocks.Items.Add(new TitleBlockOption(
@@ -49,46 +53,49 @@ internal sealed class SettingsForm : WinForms.Form
         foreach (var opt in options)
             _titleBlocks.Items.Add(opt);
 
-        var selectedIndex = 0;
-        if (!string.IsNullOrWhiteSpace(settings.TitleBlockUniqueId))
-        {
-            for (var i = 0; i < options.Count; i++)
-            {
-                if (string.Equals(options[i].UniqueId, settings.TitleBlockUniqueId, StringComparison.OrdinalIgnoreCase))
-                {
-                    selectedIndex = i + 1;
-                    break;
-                }
-            }
-        }
-        else if (!string.IsNullOrWhiteSpace(settings.TitleBlockFamilyAndType))
-        {
-            for (var i = 0; i < options.Count; i++)
-            {
-                if (string.Equals(options[i].DisplayName, settings.TitleBlockFamilyAndType, StringComparison.OrdinalIgnoreCase))
-                {
-                    selectedIndex = i + 1;
-                    break;
-                }
-            }
-        }
+        _titleBlocks.SelectedIndex = ResolveTitleBlockIndex(settings, options);
 
-        _titleBlocks.SelectedIndex = Math.Min(selectedIndex, _titleBlocks.Items.Count - 1);
+        var scaleLabel = new WinForms.Label
+        {
+            Text = "View scale (fit sheet)",
+            AutoSize = true,
+            Location = new System.Drawing.Point(16, 84)
+        };
+        _viewScale = new WinForms.ComboBox
+        {
+            DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
+            Location = new System.Drawing.Point(280, 80),
+            Width = 236
+        };
+        _viewScale.Items.AddRange(new object[]
+        {
+            "Auto-fit to sheet",
+            "1/8\" = 1'-0\" (1:96)",
+            "3/16\" = 1'-0\" (1:64)",
+            "1/4\" = 1'-0\" (1:48)",
+            "3/8\" = 1'-0\" (1:32)",
+            "1/2\" = 1'-0\" (1:24)",
+            "3/4\" = 1'-0\" (1:16)",
+            "1\" = 1'-0\" (1:12)",
+            "1 1/2\" = 1'-0\" (1:8)",
+            "3\" = 1'-0\" (1:4)"
+        });
+        _viewScale.SelectedIndex = ScaleToIndex(settings.ViewScale);
 
         var noteLabel = new WinForms.Label
         {
             Text = "Note / geometry clearance (ft)",
             AutoSize = true,
-            Location = new System.Drawing.Point(16, 88)
+            Location = new System.Drawing.Point(16, 128)
         };
         _noteClearance = new WinForms.NumericUpDown
         {
             DecimalPlaces = 2,
-            Minimum = 0.25m,
-            Maximum = 5m,
+            Minimum = 0.5m,
+            Maximum = 6m,
             Increment = 0.25m,
-            Value = Clamp((decimal)settings.NoteClearanceFt, 0.25m, 5m),
-            Location = new System.Drawing.Point(280, 84),
+            Value = Clamp((decimal)settings.NoteClearanceFt, 0.5m, 6m),
+            Location = new System.Drawing.Point(280, 124),
             Width = 100
         };
 
@@ -96,32 +103,40 @@ internal sealed class SettingsForm : WinForms.Form
         {
             Text = "Section cell gap (ft)",
             AutoSize = true,
-            Location = new System.Drawing.Point(16, 128)
+            Location = new System.Drawing.Point(16, 168)
         };
         _sectionGap = new WinForms.NumericUpDown
         {
             DecimalPlaces = 2,
-            Minimum = 0.5m,
-            Maximum = 6m,
+            Minimum = 0.75m,
+            Maximum = 8m,
             Increment = 0.25m,
-            Value = Clamp((decimal)settings.SectionCellGapFt, 0.5m, 6m),
-            Location = new System.Drawing.Point(280, 124),
+            Value = Clamp((decimal)settings.SectionCellGapFt, 0.75m, 8m),
+            Location = new System.Drawing.Point(280, 164),
             Width = 100
+        };
+
+        _applyExisting = new WinForms.CheckBox
+        {
+            Text = "Apply title block to all existing shop-ticket sheets now",
+            AutoSize = true,
+            Checked = settings.ApplyTitleBlockToExistingSheets,
+            Location = new System.Drawing.Point(16, 208)
         };
 
         _pathLabel = new WinForms.Label
         {
             Text = $"Saved to:\n{SettingsStore.FilePath}",
             AutoSize = false,
-            Location = new System.Drawing.Point(16, 168),
-            Size = new System.Drawing.Size(480, 40)
+            Location = new System.Drawing.Point(16, 244),
+            Size = new System.Drawing.Size(500, 40)
         };
 
         var save = new WinForms.Button
         {
             Text = "Save",
             DialogResult = WinForms.DialogResult.OK,
-            Location = new System.Drawing.Point(316, 230),
+            Location = new System.Drawing.Point(336, 310),
             Width = 88
         };
         save.Click += (_, _) => SaveSettings();
@@ -130,7 +145,7 @@ internal sealed class SettingsForm : WinForms.Form
         {
             Text = "Cancel",
             DialogResult = WinForms.DialogResult.Cancel,
-            Location = new System.Drawing.Point(412, 230),
+            Location = new System.Drawing.Point(432, 310),
             Width = 88
         };
 
@@ -139,10 +154,13 @@ internal sealed class SettingsForm : WinForms.Form
 
         Controls.Add(titleLabel);
         Controls.Add(_titleBlocks);
+        Controls.Add(scaleLabel);
+        Controls.Add(_viewScale);
         Controls.Add(noteLabel);
         Controls.Add(_noteClearance);
         Controls.Add(gapLabel);
         Controls.Add(_sectionGap);
+        Controls.Add(_applyExisting);
         Controls.Add(_pathLabel);
         Controls.Add(save);
         Controls.Add(cancel);
@@ -164,6 +182,9 @@ internal sealed class SettingsForm : WinForms.Form
         var settings = SettingsStore.Load();
         settings.NoteClearanceFt = (double)_noteClearance.Value;
         settings.SectionCellGapFt = (double)_sectionGap.Value;
+        settings.ViewScale = IndexToScale(_viewScale.SelectedIndex);
+        settings.ApplyTitleBlockToExistingSheets = _applyExisting.Checked;
+        ApplyToExistingSheets = _applyExisting.Checked;
 
         if (_titleBlocks.SelectedItem is not TitleBlockOption opt ||
             opt.SymbolId == ElementId.InvalidElementId ||
@@ -187,6 +208,57 @@ internal sealed class SettingsForm : WinForms.Form
 
         SettingsStore.Save(settings);
     }
+
+    private static int ResolveTitleBlockIndex(PlatformSettings settings, IReadOnlyList<TitleBlockOption> options)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.TitleBlockUniqueId))
+        {
+            for (var i = 0; i < options.Count; i++)
+            {
+                if (string.Equals(options[i].UniqueId, settings.TitleBlockUniqueId, StringComparison.OrdinalIgnoreCase))
+                    return i + 1;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.TitleBlockFamilyAndType))
+        {
+            for (var i = 0; i < options.Count; i++)
+            {
+                if (string.Equals(options[i].DisplayName, settings.TitleBlockFamilyAndType, StringComparison.OrdinalIgnoreCase))
+                    return i + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private static int ScaleToIndex(int scale) => scale switch
+    {
+        96 => 1,
+        64 => 2,
+        48 => 3,
+        32 => 4,
+        24 => 5,
+        16 => 6,
+        12 => 7,
+        8 => 8,
+        4 => 9,
+        _ => 0
+    };
+
+    private static int IndexToScale(int index) => index switch
+    {
+        1 => 96,
+        2 => 64,
+        3 => 48,
+        4 => 32,
+        5 => 24,
+        6 => 16,
+        7 => 12,
+        8 => 8,
+        9 => 4,
+        _ => 0
+    };
 
     private static decimal Clamp(decimal value, decimal min, decimal max) =>
         value < min ? min : value > max ? max : value;

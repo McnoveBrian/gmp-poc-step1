@@ -58,5 +58,13 @@ internal static class RibbonBuilder
         openReports.SetImage($"{IconRoot}/Reports16-Light.png");
         openReports.SetLargeImage($"{IconRoot}/Reports32-Light.png");
         openReports.SetToolTip("Open the run reports folder");
+
+        var verify = help.AddPushButton<SmokeVerifyCommand>("Verify");
+        verify.SetImage($"{IconRoot}/About16-Light.png");
+        verify.SetLargeImage($"{IconRoot}/About32-Light.png");
+        verify.SetToolTip("Generate a shop ticket and verify title blocks + scales");
+        verify.SetLongDescription(
+            "Selects a panel if needed, generates sheets, then checks that every shop-ticket sheet " +
+            "has the configured title block and that view scales were applied.");
     }
 }

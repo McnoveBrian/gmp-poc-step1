@@ -8,8 +8,8 @@ using View = Autodesk.Revit.DB.View;
 namespace GmpPlatform.Revit.ShopTickets;
 
 /// <summary>
-/// Shop-ticket generator: title-block sheets, non-overlapping note/section layout,
-/// and sandwich-panel outlines closer to AFIP-style detailing.
+/// Shop-ticket generator: per-sheet title blocks, auto scale-to-fit,
+/// and region-based layout so notes never sit on top of drawings.
 /// </summary>
 internal sealed class WallShopTicketGenerator
 {
@@ -17,6 +17,7 @@ internal sealed class WallShopTicketGenerator
     private readonly Element _panel;
     private readonly ShopTicketPlan _plan;
     private readonly PlatformSettings _settings;
+    private ElementId _textTypeId = ElementId.InvalidElementId;
 
     public WallShopTicketGenerator(Document doc, Element panel, ShopTicketPlan plan, PlatformSettings? settings = null)
     {
@@ -29,8 +30,10 @@ internal sealed class WallShopTicketGenerator
     public ShopTicketRunResult Generate()
     {
         var createdSheets = new List<string>();
+        var createdSheetIds = new List<long>();
         var createdViews = new List<string>();
-        var titleBlockId = TitleBlockCatalog.ResolvePreferredId(_doc, _settings);
+        var titleBlockId = TitleBlockService.ResolveOrDefault(_doc, _settings);
+        _textTypeId = ResolveTextTypeId();
 
         if (titleBlockId != ElementId.InvalidElementId &&
             _doc.GetElement(titleBlockId) is FamilySymbol { IsActive: false } inactive)
@@ -42,6 +45,7 @@ internal sealed class WallShopTicketGenerator
         {
             tx.Start();
 
+            // One live section per run; only placed on the TIF sheet (a view can live on one sheet).
             ViewSection? section = TryCreatePanelSection(createdViews);
 
             foreach (var sheetPlan in _plan.Sheets)
@@ -49,17 +53,33 @@ internal sealed class WallShopTicketGenerator
                 var drafting = CreateDraftingView(sheetPlan, createdViews);
                 DrawSheetContent(drafting, sheetPlan);
 
-                var sheet = ViewSheet.Create(_doc, titleBlockId);
+                // Create blank sheet, then place title block on EVERY sheet explicitly.
+                var sheet = ViewSheet.Create(_doc, ElementId.InvalidElementId);
                 sheet.Name = sheetPlan.SheetName;
                 sheet.SheetNumber = EnsureUniqueSheetNumber(sheetPlan.SheetNumber);
+                TitleBlockService.PlaceOnSheet(_doc, sheet, titleBlockId);
+
+                FitViewToSheet(drafting, sheet);
+                if (sheetPlan.Kind == ShopTicketSheetKind.TifFabrication && section != null)
+                    FitViewToSheet(section, sheet, heightFraction: 0.85);
 
                 PlaceViewports(sheet, drafting, section, sheetPlan.Kind);
                 TryStampSheetIdentity(sheet);
 
                 createdSheets.Add($"{sheet.SheetNumber} — {sheet.Name}");
+                createdSheetIds.Add(sheet.Id.Value);
             }
 
             tx.Commit();
+        }
+
+        // Post-pass: ensure every created shop-ticket sheet still has the chosen title block.
+        using (var tx = new Transaction(_doc, "GMP — Ensure title blocks on sheets"))
+        {
+            tx.Start();
+            var ensured = TitleBlockService.ApplyToShopTicketSheets(_doc, titleBlockId);
+            tx.Commit();
+            PlatformLog.Logger.Information("Title block ensure pass touched {Count} sheet(s)", ensured);
         }
 
         PlatformLog.Logger.Information(
@@ -74,45 +94,50 @@ internal sealed class WallShopTicketGenerator
             Success = true,
             Message =
                 $"Created {createdSheets.Count} shop-ticket sheets for mark '{_plan.Panel.Mark}'.\n" +
-                $"Title block: {TitleBlockCatalog.Describe(_doc, titleBlockId)}",
+                $"Title block: {TitleBlockCatalog.Describe(_doc, titleBlockId)}\n" +
+                $"View scale: {(_settings.ViewScale <= 0 ? "auto-fit" : $"1:{_settings.ViewScale}")}",
             CreatedSheetNames = createdSheets,
-            CreatedViewNames = createdViews
+            CreatedViewNames = createdViews,
+            CreatedSheetIds = createdSheetIds
         };
+    }
+
+    private void FitViewToSheet(View view, ViewSheet sheet, double heightFraction = 1.0)
+    {
+        if (!SheetLayoutHelper.TryGetContentBounds(_doc, view, out var bounds))
+        {
+            if (_settings.ViewScale > 0)
+                view.Scale = _settings.ViewScale;
+            return;
+        }
+
+        var printable = SheetLayoutHelper.GetPrintableArea(sheet, _settings);
+        var paperW = Math.Max(printable.Max.U - printable.Min.U, 0.5);
+        var paperH = Math.Max((printable.Max.V - printable.Min.V) * heightFraction, 0.5);
+        var contentW = Math.Max(bounds.Max.X - bounds.Min.X, 0.5);
+        var contentH = Math.Max(bounds.Max.Y - bounds.Min.Y, 0.5);
+
+        view.Scale = SheetLayoutHelper.FitScale(contentW, contentH, paperW, paperH, _settings.ViewScale);
     }
 
     private void PlaceViewports(ViewSheet sheet, ViewDrafting drafting, ViewSection? section, ShopTicketSheetKind kind)
     {
-        var outline = sheet.Outline;
-        var minU = outline.Min.U;
-        var maxU = outline.Max.U;
-        var minV = outline.Min.V;
-        var maxV = outline.Max.V;
-        var width = Math.Max(maxU - minU, 1.0);
-        var height = Math.Max(maxV - minV, 1.0);
-        var reserve = Math.Clamp(_settings.TitleBlockRightReserve, 0.15, 0.4);
-        var contentMaxU = minU + width * (1.0 - reserve);
+        var printable = SheetLayoutHelper.GetPrintableArea(sheet, _settings);
 
-        // Primary drafting layout sits in the left/center printable area (away from title block).
-        var draftingOrigin = new XYZ(
-            minU + (contentMaxU - minU) * 0.38,
-            minV + height * 0.48,
-            0);
-        Viewport.Create(_doc, sheet.Id, drafting.Id, draftingOrigin);
-
-        // Live section cut goes on TIF only, to the right of drafting but left of title block.
         if (kind == ShopTicketSheetKind.TifFabrication && section != null)
         {
-            var sectionOrigin = new XYZ(
-                minU + (contentMaxU - minU) * 0.78,
-                minV + height * 0.42,
-                0);
-            Viewport.Create(_doc, sheet.Id, section.Id, sectionOrigin);
+            // Drafting left, live section right — both inside printable area.
+            SheetLayoutHelper.PlaceViewport(_doc, sheet, drafting.Id, printable, 0.32, 0.50);
+            SheetLayoutHelper.PlaceViewport(_doc, sheet, section.Id, printable, 0.78, 0.50);
+        }
+        else
+        {
+            SheetLayoutHelper.PlaceViewport(_doc, sheet, drafting.Id, printable, 0.48, 0.50);
         }
     }
 
     private void TryStampSheetIdentity(ViewSheet sheet)
     {
-        TrySetParam(sheet, "Sheet Name", sheet.Name);
         TrySetParam(sheet, BuiltInParameter.SHEET_NAME, sheet.Name);
 
         var mark = _plan.Panel.Mark;
@@ -145,7 +170,10 @@ internal sealed class WallShopTicketGenerator
 
         var view = ViewDrafting.Create(_doc, vdt.Id);
         view.Name = EnsureUniqueViewName($"{_plan.Panel.Mark}_{sheetPlan.Kind}");
-        view.Scale = sheetPlan.Kind == ShopTicketSheetKind.SectionsAndBom ? 24 : 48;
+        // Temporary scale; FitViewToSheet adjusts after content exists.
+        view.Scale = _settings.ViewScale > 0
+            ? _settings.ViewScale
+            : sheetPlan.Kind == ShopTicketSheetKind.SectionsAndBom ? 24 : 48;
         createdViews.Add(view.Name);
         return view;
     }
@@ -158,113 +186,114 @@ internal sealed class WallShopTicketGenerator
             DrawElevationLayout(view, sheetPlan);
     }
 
-    /// <summary>TIF / BIF: sandwich elevation outline with notes in a clear left column.</summary>
+    /// <summary>
+    /// TIF / BIF layout regions (model feet):
+    /// [ geometry + joint ]  |gap|  [ notes column ]
+    /// Text grows downward, so notes start at the top of the geometry band.
+    /// </summary>
     private void DrawElevationLayout(ViewDrafting view, ShopTicketSheetPlan sheetPlan)
     {
         var p = _plan.Panel;
         var length = Math.Max(p.LengthFt, 4.0);
         var height = Math.Max(p.HeightFt, 2.0);
         var thickness = Math.Max(p.ThicknessFt, 0.5);
-        var gap = Math.Max(_settings.NoteClearanceFt, 0.75);
+        var gap = Math.Max(_settings.NoteClearanceFt, 1.25);
 
-        // Geometry origin at (0,0). Notes occupy x < -gap.
         DrawInsulatedPanelElevation(view, length, height, thickness, sheetPlan.Kind);
 
-        var jointX = length + gap;
+        // Joint column clear of the panel + side strip.
+        var sideW = Math.Max(thickness, 0.5);
+        var geometryRight = length + 0.05 + sideW;
+        var jointX = geometryRight + gap;
         DrawLine(view, new XYZ(jointX, 0, 0), new XYZ(jointX, height, 0));
-        DrawLine(view, new XYZ(length, height * 0.5, 0), new XYZ(jointX + 0.35, height * 0.5, 0));
-        DrawText(view, new XYZ(jointX + 0.15, height * 0.5 + 0.2, 0), "JOINT / CONN");
+        DrawLine(view, new XYZ(geometryRight, height * 0.5, 0), new XYZ(jointX + 0.4, height * 0.5, 0));
+        DrawLabel(view, new XYZ(jointX + 0.2, height * 0.55, 0), "JOINT / CONN");
 
         if (sheetPlan.Kind == ShopTicketSheetKind.BifFinish)
         {
             var revealY = height - Math.Min(0.5, height * 0.08);
             DrawLine(view, new XYZ(0.2, revealY, 0), new XYZ(length - 0.2, revealY, 0));
-            DrawText(view, new XYZ(0.25, revealY - gap * 0.35, 0), "REVEAL (BIF)");
+            // Label in the notes column, not on the face.
+            DrawLabel(view, new XYZ(jointX + 0.2, revealY, 0), "REVEAL (BIF)");
         }
 
-        var notes = BuildNotesBlock(sheetPlan, includeBom: false);
-        var noteOrigin = new XYZ(-(EstimateNoteWidth(notes) + gap), height, 0);
-        DrawText(view, noteOrigin, notes);
+        var notes = BuildNotesBlock(sheetPlan);
+        var notesX = jointX + gap + 0.5;
+        // Text grows downward from this point — keep it aligned with the panel top.
+        DrawLabel(view, new XYZ(notesX, height, 0), notes);
 
-        DrawText(
-            view,
-            new XYZ(0, -gap * 0.55, 0),
-            $"GMP · {_plan.RunId} · {sheetPlan.SheetNumber}");
+        // Footer below geometry with clearance.
+        DrawLabel(view, new XYZ(0, -gap, 0), $"GMP · {_plan.RunId} · {sheetPlan.SheetNumber}");
     }
 
     /// <summary>
-    /// Sheet 3: AFIP-like sandwich section cells in a grid with gaps, BOM to the right.
+    /// Sheet 3: section cells in a spaced grid; header above; BOM in a right column.
     /// </summary>
     private void DrawSectionsAndBomLayout(ViewDrafting view, ShopTicketSheetPlan sheetPlan)
     {
         var p = _plan.Panel;
         var thickness = Math.Max(p.ThicknessFt, 0.5);
-        var cellGap = Math.Max(_settings.SectionCellGapFt, 1.0);
-        var noteGap = Math.Max(_settings.NoteClearanceFt, 0.75);
+        var cellGap = Math.Max(_settings.SectionCellGapFt, 1.75);
+        var noteGap = Math.Max(_settings.NoteClearanceFt, 1.25);
 
-        // Typical AFIP sheet-3 section footprints (model space feet, roughly to panel thickness).
         var sections = BuildDemoSectionSpecs(thickness);
-        const int columns = 4;
-        var cellWidth = thickness * 3.2 + 1.2;
-        var cellHeight = thickness * 2.8 + 1.8;
+        const int columns = 3; // fewer columns → larger cells, less crowding
+        var cellWidth = Math.Max(thickness * 4.0, 2.5) + 2.0;  // includes callout gutter
+        var cellHeight = Math.Max(thickness * 3.5, 2.0) + 2.2; // includes title + dim gutter
 
         for (var i = 0; i < sections.Count; i++)
         {
             var col = i % columns;
             var row = i / columns;
-            var origin = new XYZ(col * (cellWidth + cellGap), -row * (cellHeight + cellGap), 0);
-            DrawSandwichSectionCell(view, origin, sections[i]);
+            // Geometry origin inside cell with padding for dims (above) and title (below).
+            var origin = new XYZ(
+                col * (cellWidth + cellGap) + 0.15,
+                -row * (cellHeight + cellGap) - 0.15,
+                0);
+            DrawSandwichSectionCell(view, origin, sections[i], cellWidth - 0.3);
         }
 
         var gridWidth = columns * cellWidth + (columns - 1) * cellGap;
         var rows = (sections.Count + columns - 1) / columns;
+        var gridTop = cellHeight * 0.15;
         var gridBottom = -((rows - 1) * (cellHeight + cellGap) + cellHeight);
 
-        var bom = BuildBomBlock(sheetPlan);
-        var bomOrigin = new XYZ(gridWidth + noteGap + 0.5, 0.5, 0);
-        DrawText(view, bomOrigin, bom);
-
         var header = $"{sheetPlan.Title}\nMark: {p.Mark}    Type: {p.TypeName}    Design: {p.DesignNo}";
-        DrawText(view, new XYZ(0, cellHeight * 0.35 + noteGap, 0), header);
+        // Header above the grid; text grows down toward but stops before cells via gap.
+        DrawLabel(view, new XYZ(0, gridTop + noteGap + 1.2, 0), header);
 
-        DrawText(
-            view,
-            new XYZ(0, gridBottom - noteGap * 0.6, 0),
-            $"GMP · {_plan.RunId} · {sheetPlan.SheetNumber}");
+        var bom = BuildBomBlock(sheetPlan);
+        DrawLabel(view, new XYZ(gridWidth + noteGap, gridTop, 0), bom);
+
+        DrawLabel(view, new XYZ(0, gridBottom - noteGap, 0), $"GMP · {_plan.RunId} · {sheetPlan.SheetNumber}");
     }
 
     private static IReadOnlyList<SectionSpec> BuildDemoSectionSpecs(double thicknessFt)
     {
-        // Outline proportions inspired by AFIP-1035 sheet 3 (A/B/C/C1…).
         var t = thicknessFt;
         return new[]
         {
             new SectionSpec("A", t * 2.4, t, HasRecess: false, SolidZone: true, Label: "SOLID ZONE"),
             new SectionSpec("B", t * 2.2, t, HasRecess: true, SolidZone: false, Label: "2\" RECESS"),
-            new SectionSpec("D", t * 2.0, t, HasRecess: false, SolidZone: false, Label: null),
-            new SectionSpec("E", t * 2.0, t, HasRecess: true, SolidZone: true, Label: "SOLID ZONE"),
-            new SectionSpec("C", t * 5.5, t, HasRecess: true, SolidZone: true, Label: "POCKET"),
+            new SectionSpec("C", t * 4.5, t, HasRecess: true, SolidZone: true, Label: "POCKET"),
             new SectionSpec("C1", t * 2.2, t * 1.15, HasRecess: true, SolidZone: false, Label: null),
-            new SectionSpec("C2", t * 2.2, t * 1.15, HasRecess: true, SolidZone: false, Label: null),
+            new SectionSpec("D", t * 2.0, t, HasRecess: false, SolidZone: false, Label: null),
+            new SectionSpec("E", t * 2.0, t, HasRecess: false, SolidZone: true, Label: "SOLID ZONE"),
             new SectionSpec("F", t * 2.0, t, HasRecess: false, SolidZone: false, Label: null),
-            new SectionSpec("M", t * 3.2, t * 1.4, HasRecess: false, SolidZone: false, Label: "CORBEL"),
-            new SectionSpec("H", t * 2.0, t, HasRecess: false, SolidZone: true, Label: null),
-            new SectionSpec("N", t * 2.4, t, HasRecess: false, SolidZone: false, Label: null),
-            new SectionSpec("S", t * 2.0, t, HasRecess: false, SolidZone: false, Label: "SEC S")
+            new SectionSpec("M", t * 3.0, t * 1.3, HasRecess: false, SolidZone: false, Label: "CORBEL"),
+            new SectionSpec("H", t * 2.0, t, HasRecess: false, SolidZone: true, Label: null)
         };
     }
 
-    private void DrawSandwichSectionCell(View view, XYZ origin, SectionSpec spec)
+    private void DrawSandwichSectionCell(View view, XYZ origin, SectionSpec spec, double cellSlotWidth)
     {
         var w = spec.WidthFt;
         var h = spec.HeightFt;
         var wythe = Math.Max(h * 0.22, 0.08);
         var insulation = Math.Max(h - 2 * wythe, 0.1);
 
-        // Outer outline
         DrawRect(view, origin, w, h);
 
-        // Inner wythe / insulation / outer wythe bands (horizontal sandwich)
         var y1 = origin.Y + wythe;
         var y2 = y1 + insulation;
         DrawLine(view, new XYZ(origin.X, y1, 0), new XYZ(origin.X + w, y1, 0));
@@ -286,24 +315,23 @@ internal sealed class WallShopTicketGenerator
             DrawLine(view, new XYZ(sx + sw, origin.Y + 0.02, 0), new XYZ(sx + sw, origin.Y + h - 0.02, 0));
         }
 
-        // Part callout to the right of the cell (clear of outline)
-        var callout = new XYZ(origin.X + w + 0.25, origin.Y + h * 0.55, 0);
-        DrawLine(view, new XYZ(origin.X + w, origin.Y + h * 0.5, 0), callout);
-        DrawText(view, new XYZ(callout.X + 0.05, callout.Y, 0), "SNX100");
+        // Callout in the right gutter of the cell slot (not over the outline).
+        var calloutX = origin.X + Math.Min(w + 0.35, cellSlotWidth - 0.2);
+        DrawLine(view, new XYZ(origin.X + w, origin.Y + h * 0.5, 0), new XYZ(calloutX, origin.Y + h * 0.5, 0));
+        DrawLabel(view, new XYZ(calloutX + 0.05, origin.Y + h * 0.55, 0), "SNX100");
 
         if (!string.IsNullOrEmpty(spec.Label))
-            DrawText(view, new XYZ(origin.X + 0.08, origin.Y + h * 0.55, 0), spec.Label!);
+            DrawLabel(view, new XYZ(origin.X + 0.08, origin.Y + h * 0.62, 0), spec.Label!);
 
-        // Title centered under the cell with clearance
-        var title = $"SECTION \"{spec.Name}\"";
-        DrawText(view, new XYZ(origin.X + w * 0.15, origin.Y - 0.45, 0), title);
+        // Title below outline with clearance.
+        DrawLabel(view, new XYZ(origin.X, origin.Y - 0.55, 0), $"SECTION \"{spec.Name}\"");
 
-        // Simple overall dimension ticks above the cell
-        var dimY = origin.Y + h + 0.28;
+        // Dimension band above outline.
+        var dimY = origin.Y + h + 0.35;
         DrawLine(view, new XYZ(origin.X, dimY, 0), new XYZ(origin.X + w, dimY, 0));
         DrawLine(view, new XYZ(origin.X, dimY - 0.08, 0), new XYZ(origin.X, dimY + 0.08, 0));
         DrawLine(view, new XYZ(origin.X + w, dimY - 0.08, 0), new XYZ(origin.X + w, dimY + 0.08, 0));
-        DrawText(view, new XYZ(origin.X + w * 0.25, dimY + 0.05, 0), FormatFeetInches(w));
+        DrawLabel(view, new XYZ(origin.X + w * 0.15, dimY + 0.12, 0), FormatFeetInches(w));
     }
 
     private void DrawInsulatedPanelElevation(
@@ -313,14 +341,11 @@ internal sealed class WallShopTicketGenerator
         double thickness,
         ShopTicketSheetKind kind)
     {
-        // Main face outline
         DrawRect(view, XYZ.Zero, length, height);
 
-        // Centerline (dashed approximation with short segments)
         var cx = length * 0.5;
         DrawDashed(view, new XYZ(cx, 0, 0), new XYZ(cx, height, 0), 0.35);
 
-        // Side thickness strip showing sandwich build-up (matches PDF edge look)
         var sideX = length + 0.05;
         var sideW = Math.Max(thickness, 0.5);
         DrawRect(view, new XYZ(sideX, 0, 0), sideW, height);
@@ -329,7 +354,6 @@ internal sealed class WallShopTicketGenerator
         DrawLine(view, new XYZ(sideX + sideW - wythe, 0, 0), new XYZ(sideX + sideW - wythe, height, 0));
         DrawHatch(view, new XYZ(sideX + wythe, 0, 0), sideW - 2 * wythe, height);
 
-        // Opening — rectangular through-opening with recess lip
         var ow = Math.Min(2.5, length * 0.18);
         var oh = Math.Min(3.0, height * 0.28);
         var ox = length * 0.32;
@@ -338,7 +362,6 @@ internal sealed class WallShopTicketGenerator
         var lip = Math.Min(0.12, ow * 0.08);
         DrawRect(view, new XYZ(ox + lip, oy + lip, 0), ow - 2 * lip, oh - 2 * lip);
 
-        // Corner chamfer ticks (fabrication cue)
         const double ch = 0.2;
         DrawLine(view, new XYZ(0, ch, 0), new XYZ(ch, 0, 0));
         DrawLine(view, new XYZ(length - ch, 0, 0), new XYZ(length, ch, 0));
@@ -346,10 +369,10 @@ internal sealed class WallShopTicketGenerator
         DrawLine(view, new XYZ(length - ch, height, 0), new XYZ(length, height - ch, 0));
 
         if (kind == ShopTicketSheetKind.TifFabrication)
-            DrawText(view, new XYZ(ox, oy + oh + 0.25, 0), "OPENING");
+            DrawLabel(view, new XYZ(ox, oy + oh + 0.35, 0), "OPENING");
     }
 
-    private string BuildNotesBlock(ShopTicketSheetPlan sheetPlan, bool includeBom)
+    private string BuildNotesBlock(ShopTicketSheetPlan sheetPlan)
     {
         var p = _plan.Panel;
         var sb = new StringBuilder();
@@ -358,20 +381,14 @@ internal sealed class WallShopTicketGenerator
         sb.AppendLine($"Type: {p.TypeName}");
         sb.AppendLine($"Design: {p.DesignNo}");
         sb.AppendLine($"Family: {p.FamilyName}");
-        sb.AppendLine($"Size: L={FormatFeetInches(p.LengthFt)}  H={FormatFeetInches(p.HeightFt)}  T={FormatFeetInches(p.ThicknessFt)}");
+        sb.AppendLine(
+            $"Size: L={FormatFeetInches(p.LengthFt)}  H={FormatFeetInches(p.HeightFt)}  T={FormatFeetInches(p.ThicknessFt)}");
         if (p.NeighborMarks.Count > 0)
             sb.AppendLine("Neighbors: " + string.Join(", ", p.NeighborMarks));
         sb.AppendLine();
         sb.AppendLine("Production notes:");
         foreach (var note in sheetPlan.ProductionNotes)
             sb.AppendLine("• " + note);
-
-        if (includeBom)
-        {
-            sb.AppendLine();
-            sb.Append(BuildBomBlock(sheetPlan));
-        }
-
         return sb.ToString().TrimEnd();
     }
 
@@ -401,14 +418,6 @@ internal sealed class WallShopTicketGenerator
         return sb.ToString().TrimEnd();
     }
 
-    private static double EstimateNoteWidth(string notes)
-    {
-        var lines = notes.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        var maxChars = lines.Length == 0 ? 20 : lines.Max(l => l.Length);
-        // Approx drafting text width at typical note size (~0.1 ft per char at scale).
-        return Math.Max(3.5, maxChars * 0.09);
-    }
-
     private void DrawRect(View view, XYZ origin, double width, double height)
     {
         var bl = origin;
@@ -424,8 +433,15 @@ internal sealed class WallShopTicketGenerator
     private void DrawHatch(View view, XYZ origin, double width, double height)
     {
         if (width <= 0.01 || height <= 0.01) return;
-        var step = Math.Max(Math.Min(width, height) * 0.35, 0.12);
-        for (var x = -height; x < width; x += step)
+        var step = Math.Max(Math.Min(width, height) * 0.35, 0.15);
+        // Cap segment count so tall panels (40'+ columns) stay responsive.
+        var maxLines = 40;
+        var est = (int)Math.Ceiling((width + height) / step);
+        if (est > maxLines)
+            step = (width + height) / maxLines;
+
+        var drawn = 0;
+        for (var x = -height; x < width && drawn < maxLines; x += step)
         {
             var x0 = origin.X + Math.Max(x, 0);
             var y0 = origin.Y + Math.Max(-x, 0);
@@ -433,6 +449,7 @@ internal sealed class WallShopTicketGenerator
             var y1 = origin.Y + Math.Min(height, width - x);
             if (x1 - x0 < 0.02) continue;
             DrawLine(view, new XYZ(x0, y0, 0), new XYZ(x1, y1, 0));
+            drawn++;
         }
     }
 
@@ -492,6 +509,7 @@ internal sealed class WallShopTicketGenerator
 
             var section = ViewSection.CreateSection(_doc, vft.Id, sectionBox);
             section.Name = EnsureUniqueViewName($"{_plan.Panel.Mark}_SEC");
+            section.Scale = _settings.ViewScale > 0 ? _settings.ViewScale : 48;
             createdViews.Add(section.Name);
             return section;
         }
@@ -509,23 +527,18 @@ internal sealed class WallShopTicketGenerator
         _doc.Create.NewDetailCurve(view, line);
     }
 
-    private void DrawText(View view, XYZ origin, string text)
+    private void DrawLabel(View view, XYZ origin, string text) =>
+        DraftingText.CreateAutoSized(_doc, view, origin, text, _textTypeId);
+
+    private ElementId ResolveTextTypeId()
     {
         var textTypeId = _doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType);
-        if (textTypeId == ElementId.InvalidElementId)
-        {
-            textTypeId = new FilteredElementCollector(_doc)
-                .OfClass(typeof(TextNoteType))
-                .FirstElementId();
-        }
+        if (textTypeId != ElementId.InvalidElementId)
+            return textTypeId;
 
-        var options = new TextNoteOptions(textTypeId)
-        {
-            HorizontalAlignment = HorizontalTextAlignment.Left,
-            KeepRotatedTextReadable = true
-        };
-
-        TextNote.Create(_doc, view.Id, origin, text, options);
+        return new FilteredElementCollector(_doc)
+            .OfClass(typeof(TextNoteType))
+            .FirstElementId();
     }
 
     private static string FormatFeetInches(double feet)
