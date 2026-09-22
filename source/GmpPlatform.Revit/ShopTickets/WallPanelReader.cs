@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using GmpPlatform.Core.Models;
@@ -6,6 +7,9 @@ namespace GmpPlatform.Revit.ShopTickets;
 
 internal static class WallPanelReader
 {
+    /// <summary>Tindall part numbers look like INS087, PAS018, RSX03143, SPS025.</summary>
+    private static readonly Regex PartNumberPattern = new(@"\b[A-Z]{2,3}[A-Z]?\d{3,5}\b", RegexOptions.Compiled);
+
     public static bool TryGetSelectedPanel(UIDocument uidoc, out Element element, out string error)
     {
         element = null!;
@@ -46,31 +50,64 @@ internal static class WallPanelReader
     public static WallPanelSnapshot Read(Element element)
     {
         var type = element.Document.GetElement(element.GetTypeId()) as ElementType;
-        var bbox = element.get_BoundingBox(null);
-        var size = bbox == null
-            ? (0d, 0d, 0d)
-            : (
-                Math.Abs(bbox.Max.X - bbox.Min.X) / 12.0, // Revit internal feet already; bbox is in feet
-                Math.Abs(bbox.Max.Z - bbox.Min.Z),
-                Math.Abs(bbox.Max.Y - bbox.Min.Y));
+        var warnings = new List<string>();
 
-        // Bounding box values are already in feet in the Revit API.
-        if (bbox != null)
-        {
-            size = (
-                Math.Abs(bbox.Max.X - bbox.Min.X),
-                Math.Abs(bbox.Max.Z - bbox.Min.Z),
-                Math.Abs(bbox.Max.Y - bbox.Min.Y));
-        }
-
-        var mark = GetParam(element, BuiltInParameter.ALL_MODEL_MARK)
-                   ?? GetParam(element, "Mark")
+        // ---- identity -------------------------------------------------------
+        // CONTROL_MARK is the piece mark the ticket prints (AFIP-1035). The built-in
+        // Mark parameter holds a category label ("PC WALL PANEL") on this content and
+        // is identical across every panel, so it is only a last resort.
+        var mark = Param(element, "CONTROL_MARK")
+                   ?? Param(element, BuiltInParameter.ALL_MODEL_MARK)
                    ?? "";
 
-        var design = GetParam(element, "Design No")
-                     ?? GetParam(type, "Design No")
+        if (Param(element, "CONTROL_MARK") == null)
+            warnings.Add("CONTROL_MARK not found on the panel; falling back to the built-in Mark parameter.");
+
+        var pid = Param(element, "CONTROL_NUMBER") ?? "";
+
+        var design = Param(element, "DESIGN_NUMBER")
+                     ?? Param(type, "DESIGN_NUMBER")
+                     ?? Param(element, "Design No")
                      ?? type?.Name
                      ?? "";
+
+        // ---- dimensions -----------------------------------------------------
+        // The model carries the exact printed values. DIM_LENGTH is the long direction
+        // (46'-3") and DIM_WIDTH is the panel height as drawn (12'-1 3/4"); the bounding
+        // box disagrees with both (it reports 46'-4") and its axes depend on how the
+        // panel happens to be placed, so parameters are strongly preferred.
+        var lengthFt = Length(element, type, "DIM_LENGTH");
+        var heightFt = Length(element, type, "DIM_WIDTH");
+        var thicknessFt = Length(element, type, "DIM_THICKNESS");
+        var dimensionSource = "parameters (DIM_LENGTH / DIM_WIDTH / DIM_THICKNESS)";
+
+        if (lengthFt <= 0 || heightFt <= 0 || thicknessFt <= 0)
+        {
+            // Fall back to the bounding box, sorting extents by size rather than assuming
+            // which world axis is which - these panels are modeled standing up.
+            var bbox = element.get_BoundingBox(null);
+            if (bbox != null)
+            {
+                var extents = new[]
+                {
+                    Math.Abs(bbox.Max.X - bbox.Min.X),
+                    Math.Abs(bbox.Max.Y - bbox.Min.Y),
+                    Math.Abs(bbox.Max.Z - bbox.Min.Z)
+                }.OrderByDescending(v => v).ToArray();
+
+                if (lengthFt <= 0) lengthFt = extents[0];
+                if (heightFt <= 0) heightFt = extents[1];
+                if (thicknessFt <= 0) thicknessFt = extents[2];
+            }
+
+            dimensionSource = "bounding box (approximate)";
+            warnings.Add(
+                "DIM_LENGTH / DIM_WIDTH / DIM_THICKNESS were not all available; " +
+                "dimensions came from the bounding box and may differ from the printed values.");
+        }
+
+        // ---- parts ----------------------------------------------------------
+        var parts = ReadContainedParts(element, warnings);
 
         return new WallPanelSnapshot
         {
@@ -82,14 +119,92 @@ internal static class WallPanelReader
                 : (type?.get_Parameter(BuiltInParameter.SYMBOL_FAMILY_NAME_PARAM)?.AsString() ?? ""),
             TypeName = type?.Name ?? "",
             Mark = mark,
+            Pid = pid,
             DesignNo = design,
-            LengthFt = Round3(size.Item1),
-            HeightFt = Round3(size.Item2),
-            ThicknessFt = Round3(size.Item3),
+            LengthFt = Round3(lengthFt),
+            HeightFt = Round3(heightFt),
+            ThicknessFt = Round3(thicknessFt),
+            DimensionSource = dimensionSource,
             DocumentTitle = element.Document.Title,
             NeighborMarks = FindNeighborMarks(element),
-            Parts = FindNestedParts(element)
+            Parts = parts,
+            DataWarnings = warnings
         };
+    }
+
+    /// <summary>
+    /// Parts genuinely inside the panel, by geometric containment. Embeds are placed as
+    /// independent Specialty Equipment instances (not sub-components), and a bounding-box
+    /// test pulls in hardware from the neighbouring panel, so neither shortcut works here.
+    /// </summary>
+    private static IReadOnlyList<PartQuantity> ReadContainedParts(Element element, List<string> warnings)
+    {
+        var doc = element.Document;
+        var parts = new List<PartQuantity>();
+        var unmatched = 0;
+
+        try
+        {
+            var bbox = element.get_BoundingBox(null);
+            var collector = new FilteredElementCollector(doc).WhereElementIsNotElementType();
+
+            // Cheap bounding-box narrowing first; the solid intersection test is the one
+            // that decides, but it is far more expensive to run against the whole model.
+            if (bbox != null)
+                collector = collector.WherePasses(new BoundingBoxIntersectsFilter(new Outline(bbox.Min, bbox.Max)));
+
+            var contained = collector
+                .WherePasses(new ElementIntersectsElementFilter(element))
+                .ToElements()
+                .Where(e => e.Id != element.Id)
+                .ToList();
+
+            foreach (var item in contained)
+            {
+                var typeName = (doc.GetElement(item.GetTypeId()) as ElementType)?.Name ?? item.Name ?? "";
+                var isConnection = item.Category?.Id.Value == (long)BuiltInCategory.OST_StructConnections;
+
+                // Connection assemblies bundle several parts in their type name,
+                // e.g. "X-27 : PAS018 + PAS089 + EMS001".
+                var numbers = PartNumberPattern.Matches(typeName)
+                    .Cast<Match>()
+                    .Select(m => m.Value)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (numbers.Count == 0)
+                {
+                    unmatched++;
+                    continue;
+                }
+
+                foreach (var number in numbers)
+                    Add(parts, number, isConnection ? "connection assembly" : "contained");
+            }
+
+            if (contained.Count == 0)
+                warnings.Add("No parts are geometrically contained in this panel; the bill of material will be empty.");
+
+            if (unmatched > 0)
+                warnings.Add($"{unmatched} contained element(s) had no recognisable part number and were skipped.");
+        }
+        catch (Exception ex)
+        {
+            warnings.Add("Part extraction failed: " + ex.Message);
+        }
+
+        return parts
+            .OrderBy(p => p.PartNumber, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static void Add(ICollection<PartQuantity> parts, string partNumber, string source)
+    {
+        var existing = parts.FirstOrDefault(p =>
+            string.Equals(p.PartNumber, partNumber, StringComparison.OrdinalIgnoreCase));
+
+        if (existing != null) existing.Quantity += 1;
+        else parts.Add(new PartQuantity { PartNumber = partNumber, Quantity = 1, Source = source });
     }
 
     private static IReadOnlyList<string> FindNeighborMarks(Element element)
@@ -98,16 +213,12 @@ internal static class WallPanelReader
         if (bbox == null) return Array.Empty<string>();
 
         var doc = element.Document;
-        var expanded = new BoundingBoxXYZ
-        {
-            Min = new XYZ(bbox.Min.X - 2.0, bbox.Min.Y - 2.0, bbox.Min.Z - 2.0),
-            Max = new XYZ(bbox.Max.X + 2.0, bbox.Max.Y + 2.0, bbox.Max.Z + 2.0)
-        };
+        var outline = new Outline(
+            new XYZ(bbox.Min.X - 2.0, bbox.Min.Y - 2.0, bbox.Min.Z - 2.0),
+            new XYZ(bbox.Max.X + 2.0, bbox.Max.Y + 2.0, bbox.Max.Z + 2.0));
 
-        var outline = new Outline(expanded.Min, expanded.Max);
-        var filter = new BoundingBoxIntersectsFilter(outline);
-        var marks = new FilteredElementCollector(doc)
-            .WherePasses(filter)
+        return new FilteredElementCollector(doc)
+            .WherePasses(new BoundingBoxIntersectsFilter(outline))
             .WhereElementIsNotElementType()
             .Where(e => e.Id != element.Id)
             .Where(e =>
@@ -116,68 +227,47 @@ internal static class WallPanelReader
                 return c == (int)BuiltInCategory.OST_StructuralFraming ||
                        c == (int)BuiltInCategory.OST_Walls;
             })
-            .Select(e => GetParam(e, BuiltInParameter.ALL_MODEL_MARK) ?? e.Name)
+            .Select(e => Param(e, "CONTROL_MARK") ?? Param(e, BuiltInParameter.ALL_MODEL_MARK) ?? e.Name)
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(8)
-            .ToList();
-
-        return marks;
+            .ToList()!;
     }
 
-    private static IReadOnlyList<PartQuantity> FindNestedParts(Element element)
+    /// <summary>Length parameter in feet, instance first then type; 0 when absent.</summary>
+    private static double Length(Element element, Element? type, string name)
     {
-        if (element is not FamilyInstance fi)
-            return Array.Empty<PartQuantity>();
-
-        var parts = new List<PartQuantity>();
-        try
+        foreach (var host in new[] { element, type })
         {
-            var subIds = fi.GetSubComponentIds();
-            foreach (var id in subIds)
+            var p = host?.LookupParameter(name);
+            if (p is { StorageType: StorageType.Double } && p.HasValue)
             {
-                var sub = element.Document.GetElement(id);
-                if (sub == null) continue;
-                var type = element.Document.GetElement(sub.GetTypeId()) as ElementType;
-                var partNo = GetParam(sub, "Part Number")
-                             ?? GetParam(type, "Part Number")
-                             ?? GetParam(sub, BuiltInParameter.ALL_MODEL_MARK)
-                             ?? type?.Name
-                             ?? sub.Name;
-                if (string.IsNullOrWhiteSpace(partNo)) continue;
-
-                var existing = parts.FirstOrDefault(p =>
-                    string.Equals(p.PartNumber, partNo, StringComparison.OrdinalIgnoreCase));
-                if (existing != null) existing.Quantity += 1;
-                else parts.Add(new PartQuantity { PartNumber = partNo, Quantity = 1, Source = "nested" });
+                var v = p.AsDouble();
+                if (v > 0) return v;
             }
         }
-        catch
-        {
-            // Some instances do not expose subcomponents; demo continues with placeholders.
-        }
 
-        return parts;
+        return 0;
     }
 
-    private static string? GetParam(Element? element, BuiltInParameter bip)
+    private static string? Param(Element? element, BuiltInParameter bip)
     {
         if (element == null) return null;
         var p = element.get_Parameter(bip);
         var v = p?.AsString();
-        if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+        if (!string.IsNullOrWhiteSpace(v)) return v!.Trim();
         v = p?.AsValueString();
-        return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        return string.IsNullOrWhiteSpace(v) ? null : v!.Trim();
     }
 
-    private static string? GetParam(Element? element, string name)
+    private static string? Param(Element? element, string name)
     {
         if (element == null) return null;
         var p = element.LookupParameter(name);
         var v = p?.AsString();
-        if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+        if (!string.IsNullOrWhiteSpace(v)) return v!.Trim();
         v = p?.AsValueString();
-        return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        return string.IsNullOrWhiteSpace(v) ? null : v!.Trim();
     }
 
     private static double Round3(double value) => Math.Round(value, 3);

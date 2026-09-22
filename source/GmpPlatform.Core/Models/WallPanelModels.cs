@@ -8,14 +8,26 @@ public sealed class WallPanelSnapshot
     public string CategoryName { get; set; } = "";
     public string FamilyName { get; set; } = "";
     public string TypeName { get; set; } = "";
+    /// <summary>Piece mark as printed on the ticket (CONTROL_MARK), e.g. "AFIP-1035".</summary>
     public string Mark { get; set; } = "";
+
+    /// <summary>Piece id printed in the title block (CONTROL_NUMBER), e.g. "1035".</summary>
+    public string Pid { get; set; } = "";
+
     public string DesignNo { get; set; } = "";
     public double LengthFt { get; set; }
     public double HeightFt { get; set; }
     public double ThicknessFt { get; set; }
+
+    /// <summary>Where the dimensions came from — model parameters, or an approximate bounding box.</summary>
+    public string DimensionSource { get; set; } = "";
+
     public string DocumentTitle { get; set; } = "";
     public IReadOnlyList<string> NeighborMarks { get; set; } = Array.Empty<string>();
     public IReadOnlyList<PartQuantity> Parts { get; set; } = Array.Empty<PartQuantity>();
+
+    /// <summary>Problems found while reading the model; these must reach the drafter, not be swallowed.</summary>
+    public IReadOnlyList<string> DataWarnings { get; set; } = Array.Empty<string>();
 }
 
 public sealed class PartQuantity

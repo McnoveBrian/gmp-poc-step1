@@ -21,7 +21,11 @@ public static class WallShopTicketPlanner
             warnings.Add("No neighboring panels detected. Joint Detail Lines will use a demo placeholder.");
 
         if (panel.Parts.Count == 0)
-            warnings.Add("No nested part quantities found. Sheet 3 BOM will show demo placeholder rows.");
+            warnings.Add("No parts resolved from the model. Sheet 3 BOM will be empty rather than invented.");
+
+        // Anything the reader could not resolve has to travel with the plan; a ticket that
+        // looks complete but rests on missing data is worse than one that says so.
+        warnings.AddRange(panel.DataWarnings);
 
         var sheets = new List<ShopTicketSheetPlan>
         {
