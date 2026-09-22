@@ -25,11 +25,14 @@ project.fragment.lock.json
 *.cache
 
 ## Local platform / working outputs
+## NOTE: keep these anchored to the repo root. Unanchored "**/reports/" also matched
+## source/GmpPlatform.Core/Reports/ (git uses case-insensitive matching on Windows),
+## which silently kept RunReportWriter.cs out of the repository.
 .local/
 deliverables/
-**/exports/
-**/logs/
-**/reports/
+/exports/
+/logs/
+/reports/
 
 ## Large client samples & BIM/CAD binaries (keep local; do not push)
 samples/
