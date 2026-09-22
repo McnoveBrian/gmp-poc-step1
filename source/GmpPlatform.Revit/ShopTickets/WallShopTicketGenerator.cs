@@ -258,7 +258,8 @@ internal sealed class WallShopTicketGenerator
         var gridTop = cellHeight * 0.15;
         var gridBottom = -((rows - 1) * (cellHeight + cellGap) + cellHeight);
 
-        var header = $"{sheetPlan.Title}\nMark: {p.Mark}    Type: {p.TypeName}    Design: {p.DesignNo}";
+        var header = $"{sheetPlan.Title}\nMark: {p.Mark}    Type: {p.TypeName}    Design: {p.DesignNo}\n" +
+                     "SCHEMATIC SECTIONS — shapes and sizes are placeholders, NOT cut from the model.";
         // Header above the grid; text grows down toward but stops before cells via gap.
         DrawLabel(view, new XYZ(0, gridTop + noteGap + 1.2, 0), header);
 
@@ -326,12 +327,14 @@ internal sealed class WallShopTicketGenerator
         // Title below outline with clearance.
         DrawLabel(view, new XYZ(origin.X, origin.Y - 0.55, 0), $"SECTION \"{spec.Name}\"");
 
-        // Dimension band above outline.
+        // Dimension band above outline. The band is drawn to show the intended layout, but
+        // the cell width is schematic, so no measurement is printed — a real-looking value
+        // here would be read as a model dimension.
         var dimY = origin.Y + h + 0.35;
         DrawLine(view, new XYZ(origin.X, dimY, 0), new XYZ(origin.X + w, dimY, 0));
         DrawLine(view, new XYZ(origin.X, dimY - 0.08, 0), new XYZ(origin.X, dimY + 0.08, 0));
         DrawLine(view, new XYZ(origin.X + w, dimY - 0.08, 0), new XYZ(origin.X + w, dimY + 0.08, 0));
-        DrawLabel(view, new XYZ(origin.X + w * 0.15, dimY + 0.12, 0), FormatFeetInches(w));
+        DrawLabel(view, new XYZ(origin.X + w * 0.15, dimY + 0.12, 0), "(schematic)");
     }
 
     private void DrawInsulatedPanelElevation(
@@ -377,12 +380,14 @@ internal sealed class WallShopTicketGenerator
         var p = _plan.Panel;
         var sb = new StringBuilder();
         sb.AppendLine(sheetPlan.Title);
-        sb.AppendLine($"Mark: {p.Mark}");
+        sb.AppendLine($"Mark: {p.Mark}" + (string.IsNullOrWhiteSpace(p.Pid) ? "" : $"    PID: {p.Pid}"));
         sb.AppendLine($"Type: {p.TypeName}");
         sb.AppendLine($"Design: {p.DesignNo}");
         sb.AppendLine($"Family: {p.FamilyName}");
         sb.AppendLine(
             $"Size: L={FormatFeetInches(p.LengthFt)}  H={FormatFeetInches(p.HeightFt)}  T={FormatFeetInches(p.ThicknessFt)}");
+        if (!string.IsNullOrWhiteSpace(p.DimensionSource))
+            sb.AppendLine($"Dimensions from: {p.DimensionSource}");
         if (p.NeighborMarks.Count > 0)
             sb.AppendLine("Neighbors: " + string.Join(", ", p.NeighborMarks));
         sb.AppendLine();
@@ -404,15 +409,17 @@ internal sealed class WallShopTicketGenerator
         sb.AppendLine("PART NO.          QTY");
         if (p.Parts.Count == 0)
         {
-            sb.AppendLine("RSX03143            38");
-            sb.AppendLine("PAS032               2");
-            sb.AppendLine("INS087               8");
-            sb.AppendLine("SNX100             518");
+            // Never print plausible-looking part numbers we did not read from the model:
+            // a confidently wrong BOM is worse than a visibly empty one.
+            sb.AppendLine("(no parts resolved from the model — see run report)");
         }
         else
         {
             foreach (var part in p.Parts.Take(20))
                 sb.AppendLine($"{part.PartNumber,-16} {part.Quantity,6:0.###}");
+
+            if (p.Parts.Count > 20)
+                sb.AppendLine($"... and {p.Parts.Count - 20} more (see run report)");
         }
 
         return sb.ToString().TrimEnd();
