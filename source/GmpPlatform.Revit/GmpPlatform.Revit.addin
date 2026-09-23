@@ -6,6 +6,12 @@
     <AddInId>C7A91E2B-4F58-4D0A-9E33-8B1C6D2A7F10</AddInId>
     <FullClassName>GmpPlatform.Revit.Application</FullClassName>
     <VendorId>GMP</VendorId>
-    <VendorDescription>GMP Architecture LLC — Precast shop ticket automation</VendorDescription>
+    <!--
+      ASCII only: this read "LLC — Precast" with an em dash and Revit's journal rendered it
+      "LLC ? Precast", so the character does not survive Revit's own logging. (It was briefly
+      suspected of causing a shutdown crash; it does not — see the install note in the P2
+      status document. Kept as ASCII anyway, because a mangled vendor string helps nobody.)
+    -->
+    <VendorDescription>GMP Architecture LLC - Precast shop ticket automation</VendorDescription>
   </AddIn>
 </RevitAddIns>

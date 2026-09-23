@@ -14,6 +14,21 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GmpPlatform.Core\GmpPlatform.Core.csproj" />
+
+    <!--
+      Build order only. The drawing engine must exist before this project copies it (below),
+      but its assembly must never be referenced: loading AutoCAD's types into Revit's process
+      would be wrong. ReferenceOutputAssembly="false" gives the ordering without the reference.
+      SetConfiguration pins it to Release because this project builds as Release.R25 and the
+      engine has no such configuration.
+
+      Without this, a clean clone could build the add-in before the engine, silently skip the
+      copy, and ship an add-in that reports its own drawing engine as missing at run time.
+    -->
+    <ProjectReference Include="..\GmpPlatform.Acad\GmpPlatform.Acad.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false"
+                      SetConfiguration="Configuration=Release" />
   </ItemGroup>
 
   <!-- Avoid WinForms types colliding with Revit API (View, Form, TaskDialog). -->
@@ -25,11 +40,42 @@
     <Resource Include="Resources\Icons\*.png" />
   </ItemGroup>
 
+  <!--
+    The AutoCAD drawing engine ships alongside the add-in but is never referenced by it:
+    loading AutoCAD's assemblies into Revit's process would be wrong. It is only copied so
+    the add-in can hand its path to headless AutoCAD. Build GmpPlatform.Acad first; if it has
+    not been built, this is a no-op and the command reports the missing engine.
+  -->
   <ItemGroup>
-    <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*" />
-    <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
+    <!--
+      Must travel with the publish output, not just the build output: the add-in is deployed
+      from bin\$(Configuration)\publish\, so copying only to the build folder left the engine
+      missing from the installed add-in and the command reported it as not found.
+    -->
+    <!--
+      No Exists() condition. Item conditions are evaluated before anything is built, so on a
+      clean clone the engine never exists yet and the copy was silently skipped — producing an
+      add-in that reported its own drawing engine missing at run time. Without the condition
+      the copy runs during the build, by which point the ProjectReference above has built the
+      engine; and if it is genuinely absent the build fails loudly instead of shipping broken.
+    -->
+    <None Include="$(MSBuildThisFileDirectory)..\GmpPlatform.Acad\bin\Release\net8.0-windows\GmpPlatform.Acad.dll"
+          Link="GmpPlatform.Acad.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    Pinned, not floating. These were "$(RevitVersion).*", which means the API the add-in is
+    compiled against is whatever Autodesk published most recently at the moment someone
+    restores. Two builds of the same commit can then target different Revit APIs, and the
+    add-in that is handed over is not the add-in that was tested. Bump these deliberately.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Toolkit" Version="2025.2.0" />
+    <PackageReference Include="Nice3point.Revit.Extensions" Version="2025.2.4" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2025.4.60" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.4.60" />
     <PackageReference Include="JetBrains.Annotations" Version="2026.2.0" PrivateAssets="all" />
   </ItemGroup>
 

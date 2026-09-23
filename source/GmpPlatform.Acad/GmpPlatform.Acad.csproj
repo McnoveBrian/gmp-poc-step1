@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GmpPlatform.Acad</RootNamespace>
+    <AssemblyName>GmpPlatform.Acad</AssemblyName>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Description>GMP Production Platform — AutoCAD drawing engine (draws a shop ticket into the client seed DWG)</Description>
+    <AcadDir Condition="'$(AcadDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2025\</AcadDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GmpPlatform.Core\GmpPlatform.Core.csproj" />
+  </ItemGroup>
+
+  <!-- AutoCAD managed API. Never copied locally: the host process supplies them. -->
+  <ItemGroup>
+    <Reference Include="accoremgd">
+      <HintPath>$(AcadDir)accoremgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="acdbmgd">
+      <HintPath>$(AcadDir)acdbmgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="acmgd">
+      <HintPath>$(AcadDir)acmgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

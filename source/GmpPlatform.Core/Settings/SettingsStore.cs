@@ -10,7 +10,12 @@ public static class SettingsStore
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+
+        // This file is meant to be edited by hand, so "SeedDwgPath" has to work as well as
+        // "seedDwgPath". Without this a hand-added setting is silently ignored and the
+        // feature it configures just appears not to work.
+        PropertyNameCaseInsensitive = true
     };
 
     public static string FilePath => Path.Combine(GmpPlatform.Core.PlatformPaths.Config, "settings.json");

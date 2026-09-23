@@ -7,13 +7,26 @@ namespace GmpPlatform.Revit.ShopTickets;
 /// <summary>Applies / replaces title-block instances on sheets.</summary>
 internal static class TitleBlockService
 {
+    /// <summary>
+    /// Replaces the title block on every sheet this add-in created — and only those.
+    /// <para>
+    /// Writes use the extensible-storage marker alone, never the name heuristics in
+    /// <see cref="IsShopTicketSheet"/>. Those heuristics are fine for finding sheets to look at;
+    /// they are not fine for deciding which of the client's sheets to delete a title block
+    /// from, because any GMP sheet whose name reads " TIF" would match. Sheets generated
+    /// before the marker existed are therefore left alone here; that is the right way round
+    /// for a mistake to fall.
+    /// </para>
+    /// </summary>
     public static int ApplyToShopTicketSheets(Document doc, ElementId titleBlockTypeId)
     {
-        var sheets = FindShopTicketSheets(doc).ToList();
-        if (sheets.Count == 0)
-            return 0;
+        var sheets = new FilteredElementCollector(doc)
+            .OfClass(typeof(ViewSheet))
+            .Cast<ViewSheet>()
+            .Where(ShopTicketMarker.IsOurs)
+            .ToList();
 
-        return ApplyToSheets(doc, sheets, titleBlockTypeId);
+        return sheets.Count == 0 ? 0 : ApplyToSheets(doc, sheets, titleBlockTypeId);
     }
 
     public static int ApplyToSheets(Document doc, IEnumerable<ViewSheet> sheets, ElementId titleBlockTypeId)
@@ -109,6 +122,12 @@ internal static class TitleBlockService
 
     public static bool IsShopTicketSheet(ViewSheet sheet)
     {
+        // An explicit claim beats any amount of inference: sheets this add-in creates carry a
+        // marker in extensible storage (see ShopTicketMarker). Everything below is the legacy
+        // fallback for sheets generated before the marker existed, and it is a guess — it will
+        // happily match a GMP sheet that merely reads " TIF".
+        if (ShopTicketMarker.IsOurs(sheet)) return true;
+
         var name = sheet.Name ?? "";
         var number = sheet.SheetNumber ?? "";
 
@@ -145,6 +164,10 @@ internal static class TitleBlockService
         return false;
     }
 
+    /// <summary>
+    /// The title block for a shop ticket. Goes through the same resolver as the confirmation
+    /// dialog, so the dialog can never promise one title block while the sheets get another.
+    /// </summary>
     public static ElementId ResolveOrDefault(Document doc, PlatformSettings settings) =>
-        TitleBlockCatalog.ResolvePreferredId(doc, settings);
+        TitleBlockCatalog.ResolveForShopTicket(doc, settings, out _);
 }

@@ -47,10 +47,69 @@ internal static class WallPanelReader
         return true;
     }
 
+    /// <summary>
+    /// Everything read from the model in one pass, including the raw contained elements.
+    /// The snapshot is the flattened view of this; the ticket exporter needs the elements
+    /// themselves so it can place and dimension each part.
+    /// </summary>
+    internal sealed class WallPanelSnapshotContext
+    {
+        public string Mark { get; set; } = "";
+        public string Pid { get; set; } = "";
+        public string DesignNo { get; set; } = "";
+        public string FamilyName { get; set; } = "";
+        public string TypeName { get; set; } = "";
+        public double LengthFt { get; set; }
+        public double HeightFt { get; set; }
+        public double ThicknessFt { get; set; }
+        public string DimensionSource { get; set; } = "";
+        public List<string> Warnings { get; } = new();
+        public List<Element> ContainedElements { get; } = new();
+    }
+
+    /// <summary>Part numbers embedded in a family or connection-assembly type name.</summary>
+    internal static List<string> ExtractPartNumbers(string typeName) =>
+        PartNumberPattern.Matches(typeName ?? "")
+            .Cast<Match>()
+            .Select(m => m.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
     public static WallPanelSnapshot Read(Element element)
     {
+        var ctx = ReadContext(element);
+        return new WallPanelSnapshot
+        {
+            ElementId = element.Id.Value,
+            UniqueId = element.UniqueId,
+            CategoryName = element.Category?.Name ?? "",
+            FamilyName = ctx.FamilyName,
+            TypeName = ctx.TypeName,
+            Mark = ctx.Mark,
+            Pid = ctx.Pid,
+            DesignNo = ctx.DesignNo,
+            LengthFt = Round3(ctx.LengthFt),
+            HeightFt = Round3(ctx.HeightFt),
+            ThicknessFt = Round3(ctx.ThicknessFt),
+            DimensionSource = ctx.DimensionSource,
+            DocumentTitle = element.Document.Title,
+            NeighborMarks = FindNeighborMarks(element),
+            Parts = SummariseParts(element.Document, ctx),
+            DataWarnings = ctx.Warnings
+        };
+    }
+
+    internal static WallPanelSnapshotContext ReadContext(Element element)
+    {
         var type = element.Document.GetElement(element.GetTypeId()) as ElementType;
-        var warnings = new List<string>();
+        var ctx = new WallPanelSnapshotContext
+        {
+            FamilyName = type is FamilySymbol fs
+                ? fs.FamilyName
+                : (type?.get_Parameter(BuiltInParameter.SYMBOL_FAMILY_NAME_PARAM)?.AsString() ?? ""),
+            TypeName = type?.Name ?? ""
+        };
+        var warnings = ctx.Warnings;
 
         // ---- identity -------------------------------------------------------
         // CONTROL_MARK is the piece mark the ticket prints (AFIP-1035). The built-in
@@ -107,29 +166,16 @@ internal static class WallPanelReader
         }
 
         // ---- parts ----------------------------------------------------------
-        var parts = ReadContainedParts(element, warnings);
+        ctx.ContainedElements.AddRange(FindContainedElements(element, warnings));
 
-        return new WallPanelSnapshot
-        {
-            ElementId = element.Id.Value,
-            UniqueId = element.UniqueId,
-            CategoryName = element.Category?.Name ?? "",
-            FamilyName = type is FamilySymbol fs
-                ? fs.FamilyName
-                : (type?.get_Parameter(BuiltInParameter.SYMBOL_FAMILY_NAME_PARAM)?.AsString() ?? ""),
-            TypeName = type?.Name ?? "",
-            Mark = mark,
-            Pid = pid,
-            DesignNo = design,
-            LengthFt = Round3(lengthFt),
-            HeightFt = Round3(heightFt),
-            ThicknessFt = Round3(thicknessFt),
-            DimensionSource = dimensionSource,
-            DocumentTitle = element.Document.Title,
-            NeighborMarks = FindNeighborMarks(element),
-            Parts = parts,
-            DataWarnings = warnings
-        };
+        ctx.Mark = mark;
+        ctx.Pid = pid;
+        ctx.DesignNo = design;
+        ctx.LengthFt = lengthFt;
+        ctx.HeightFt = heightFt;
+        ctx.ThicknessFt = thicknessFt;
+        ctx.DimensionSource = dimensionSource;
+        return ctx;
     }
 
     /// <summary>
@@ -137,11 +183,9 @@ internal static class WallPanelReader
     /// independent Specialty Equipment instances (not sub-components), and a bounding-box
     /// test pulls in hardware from the neighbouring panel, so neither shortcut works here.
     /// </summary>
-    private static IReadOnlyList<PartQuantity> ReadContainedParts(Element element, List<string> warnings)
+    private static List<Element> FindContainedElements(Element element, List<string> warnings)
     {
         var doc = element.Document;
-        var parts = new List<PartQuantity>();
-        var unmatched = 0;
 
         try
         {
@@ -159,38 +203,56 @@ internal static class WallPanelReader
                 .Where(e => e.Id != element.Id)
                 .ToList();
 
-            foreach (var item in contained)
-            {
-                var typeName = (doc.GetElement(item.GetTypeId()) as ElementType)?.Name ?? item.Name ?? "";
-                var isConnection = item.Category?.Id.Value == (long)BuiltInCategory.OST_StructConnections;
-
-                // Connection assemblies bundle several parts in their type name,
-                // e.g. "X-27 : PAS018 + PAS089 + EMS001".
-                var numbers = PartNumberPattern.Matches(typeName)
-                    .Cast<Match>()
-                    .Select(m => m.Value)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                if (numbers.Count == 0)
-                {
-                    unmatched++;
-                    continue;
-                }
-
-                foreach (var number in numbers)
-                    Add(parts, number, isConnection ? "connection assembly" : "contained");
-            }
-
             if (contained.Count == 0)
                 warnings.Add("No parts are geometrically contained in this panel; the bill of material will be empty.");
 
-            if (unmatched > 0)
-                warnings.Add($"{unmatched} contained element(s) had no recognisable part number and were skipped.");
+            // Name what was skipped, grouped by type. "39 elements were skipped" reads like
+            // lost data and sent us looking for missing BOM rows; the census showed the
+            // skipped items are the ones the approved ticket does not give rows to either —
+            // 36 HCA studs that belong to an embed's description, the beadboard that is
+            // counted as insulation area, and two empty container families. A drafter can
+            // only check that if the warning says which types they were.
+            var unmatched = contained
+                .Select(e => new
+                {
+                    Element = e,
+                    TypeName = (doc.GetElement(e.GetTypeId()) as ElementType)?.Name ?? e.Name ?? ""
+                })
+                .Where(x => ExtractPartNumbers(x.TypeName).Count == 0)
+                .GroupBy(x => x.TypeName)
+                .Select(g => $"{g.Key} x{g.Count()}")
+                .OrderBy(s => s)
+                .ToList();
+
+            if (unmatched.Count > 0)
+                warnings.Add(
+                    $"{unmatched.Count} contained type(s) carry no part number in their type name and are " +
+                    $"not given their own bill-of-material row: {string.Join(", ", unmatched)}. " +
+                    "Confirm each is meant to roll up into a parent item rather than be listed.");
+
+            return contained;
         }
         catch (Exception ex)
         {
             warnings.Add("Part extraction failed: " + ex.Message);
+            return new List<Element>();
+        }
+    }
+
+    /// <summary>Flattens the contained elements into BOM lines for the run report.</summary>
+    private static IReadOnlyList<PartQuantity> SummariseParts(Document doc, WallPanelSnapshotContext ctx)
+    {
+        var parts = new List<PartQuantity>();
+
+        foreach (var item in ctx.ContainedElements)
+        {
+            var typeName = (doc.GetElement(item.GetTypeId()) as ElementType)?.Name ?? item.Name ?? "";
+            var isConnection = item.Category?.Id.Value == (long)BuiltInCategory.OST_StructConnections;
+
+            // Connection assemblies bundle several parts in their type name,
+            // e.g. "X-27 : PAS018 + PAS089 + EMS001".
+            foreach (var number in ExtractPartNumbers(typeName))
+                Add(parts, number, isConnection ? "connection assembly" : "contained");
         }
 
         return parts

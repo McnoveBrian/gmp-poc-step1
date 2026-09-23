@@ -57,6 +57,10 @@ internal sealed class WallShopTicketGenerator
                 var sheet = ViewSheet.Create(_doc, ElementId.InvalidElementId);
                 sheet.Name = sheetPlan.SheetName;
                 sheet.SheetNumber = EnsureUniqueSheetNumber(sheetPlan.SheetNumber);
+
+                // Claim the sheet as ours, so later passes find it by identity rather than by
+                // matching on its name.
+                ShopTicketMarker.Stamp(sheet, _plan.Panel.Mark);
                 TitleBlockService.PlaceOnSheet(_doc, sheet, titleBlockId);
 
                 FitViewToSheet(drafting, sheet);
@@ -73,13 +77,23 @@ internal sealed class WallShopTicketGenerator
             tx.Commit();
         }
 
-        // Post-pass: ensure every created shop-ticket sheet still has the chosen title block.
+        // Post-pass: make sure the sheets created in THIS run carry the chosen title block.
+        //
+        // This used to call ApplyToShopTicketSheets, which deletes and replaces the title
+        // block on every sheet in the model that a name heuristic takes to be ours — 12, then
+        // 15 sheets on successive test runs. On a client model that is a destructive write
+        // driven by a guess: a GMP sheet named "SW-101 TIF" would lose its own title block.
+        // A run now only ever touches what it created.
         using (var tx = new Transaction(_doc, "GMP — Ensure title blocks on sheets"))
         {
             tx.Start();
-            var ensured = TitleBlockService.ApplyToShopTicketSheets(_doc, titleBlockId);
+            var ours = createdSheetIds
+                .Select(id => _doc.GetElement(new ElementId(id)))
+                .OfType<ViewSheet>()
+                .ToList();
+            var ensured = TitleBlockService.ApplyToSheets(_doc, ours, titleBlockId);
             tx.Commit();
-            PlatformLog.Logger.Information("Title block ensure pass touched {Count} sheet(s)", ensured);
+            PlatformLog.Logger.Information("Title block ensure pass touched {Count} sheet(s) from this run", ensured);
         }
 
         PlatformLog.Logger.Information(
@@ -437,9 +451,22 @@ internal sealed class WallShopTicketGenerator
         DrawLine(view, tl, bl);
     }
 
+    /// <summary>
+    /// Fills a rectangle with a hatch, preferring Revit's own <see cref="FilledRegion"/> over
+    /// hand-drawn diagonals.
+    /// <para>
+    /// This used to draw up to forty detail lines at 45° and stop, so a tall panel got a few
+    /// sparse strokes rather than a hatch — it was never going to read as the client's
+    /// <c>INSULATION HATCH</c>. A filled region carries a real fill pattern, scales with the
+    /// view and is one element instead of forty. The line fallback stays for templates that
+    /// ship no filled-region type, because a sparse hatch beats a blank rectangle.
+    /// </para>
+    /// </summary>
     private void DrawHatch(View view, XYZ origin, double width, double height)
     {
         if (width <= 0.01 || height <= 0.01) return;
+        if (TryFillRegion(view, origin, width, height)) return;
+
         var step = Math.Max(Math.Min(width, height) * 0.35, 0.15);
         // Cap segment count so tall panels (40'+ columns) stay responsive.
         var maxLines = 40;
@@ -459,6 +486,63 @@ internal sealed class WallShopTicketGenerator
             drawn++;
         }
     }
+
+    private bool TryFillRegion(View view, XYZ origin, double width, double height)
+    {
+        try
+        {
+            var typeId = FilledRegionTypeId();
+            if (typeId == ElementId.InvalidElementId) return false;
+
+            var a = new XYZ(origin.X, origin.Y, 0);
+            var b = new XYZ(origin.X + width, origin.Y, 0);
+            var c = new XYZ(origin.X + width, origin.Y + height, 0);
+            var d = new XYZ(origin.X, origin.Y + height, 0);
+
+            var loop = new CurveLoop();
+            loop.Append(Line.CreateBound(a, b));
+            loop.Append(Line.CreateBound(b, c));
+            loop.Append(Line.CreateBound(c, d));
+            loop.Append(Line.CreateBound(d, a));
+
+            FilledRegion.Create(_doc, typeId, view.Id, new List<CurveLoop> { loop });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PlatformLog.Logger.Warning(ex, "Filled region unavailable; falling back to line hatch");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// A filled-region type to hatch with, preferring one that names an insulation or diagonal
+    /// pattern so the result resembles the client's convention rather than a solid block.
+    /// </summary>
+    private ElementId FilledRegionTypeId()
+    {
+        // ElementId is a reference type and its .Value is the numeric id, so the cache is a
+        // plain nullable reference rather than a Nullable<T>.
+        if (_filledRegionTypeId is not null) return _filledRegionTypeId;
+
+        var types = new FilteredElementCollector(_doc)
+            .OfClass(typeof(FilledRegionType))
+            .Cast<FilledRegionType>()
+            .ToList();
+
+        var preferred = types.FirstOrDefault(t =>
+                            (t.Name ?? "").IndexOf("insulation", StringComparison.OrdinalIgnoreCase) >= 0)
+                        ?? types.FirstOrDefault(t =>
+                            (t.Name ?? "").IndexOf("diagonal", StringComparison.OrdinalIgnoreCase) >= 0)
+                        ?? types.FirstOrDefault(t =>
+                            (t.Name ?? "").IndexOf("solid", StringComparison.OrdinalIgnoreCase) < 0)
+                        ?? types.FirstOrDefault();
+
+        _filledRegionTypeId = preferred?.Id ?? ElementId.InvalidElementId;
+        return _filledRegionTypeId;
+    }
+
+    private ElementId? _filledRegionTypeId;
 
     private void DrawDashed(View view, XYZ a, XYZ b, double dashLength)
     {

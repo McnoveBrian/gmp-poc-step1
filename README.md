@@ -45,11 +45,18 @@ Architecture follows the same Core / Revit split used on the SMH Production Plat
 
 ## Build
 
+> **Full instructions — build, install, run, test, and the known gotchas — are in
+> [RUNBOOK.md](RUNBOOK.md).** Start there.
+
 Requires **.NET SDK 8** and Visual Studio 2022 (or Build Tools).
 
 ```powershell
-dotnet build source/GmpPlatform.Revit/GmpPlatform.Revit.csproj -c Release.R25
+dotnet build GmpPlatform.sln -c Release.R25
 ```
+
+Build the **solution**, not the add-in project alone: the solution also builds the AutoCAD
+drawing engine and copies it next to the add-in. Without it the add-in loads but reports
+"Drawing engine missing" when you generate a ticket.
 
 With `DeployAddin=true`, the build copies the add-in to:
 
@@ -64,12 +71,18 @@ dotnet build source/GmpPlatform.Revit/GmpPlatform.Revit.csproj -c Release.R24
 ## Quick start (Revit 2025)
 
 1. Build with `Release.R25` (see above).  
-2. Start **Revit 2025** and open the Pilgrim’s RTE sample (or any model with a wall panel).  
+2. Start **Revit 2025** and open a **copy** of the Pilgrim's RTE model (never the original).  
 3. Select one `WALL_PANEL_INSULATED_VERTICAL` (or similar) instance.  
-4. Ribbon: **GMP Platform → Wall Ticket → Yes**.  
-5. Review the three new sheets in the project browser.  
-6. Open a sheet and run **Export DWG** if you want a demo DWG file.  
-7. **Help → Reports** opens the report folder.
+4. Ribbon: **GMP Platform → Ticket Drawing → Yes**.  
+5. About a minute later, three plotted PDF sheets under
+   `%ProgramData%\GMP\Platform\exports\`, drawn into a copy of the client's own DWG.  
+6. Read the `.draw.log` beside them: it lists everything the engine derived rather than read.
+
+**One button generates tickets.** The earlier *Wall Ticket* route, which built placeholder
+sheets inside Revit, has been retired from the ribbon along with *Export DWG* and *Verify*,
+which only served it. They are still in the code: set `"ShowDeveloperTools": true` in
+`%ProgramData%\GMP\Platform\config\settings.json` and restart Revit to bring them back on a
+separate *Developer* panel.
 
 Full steps: [docs/user-guides/demo-usage-guide.md](docs/user-guides/demo-usage-guide.md)
 

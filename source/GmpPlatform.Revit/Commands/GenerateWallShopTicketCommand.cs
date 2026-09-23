@@ -5,7 +5,9 @@ using GmpPlatform.Core.Logging;
 using GmpPlatform.Core.Planning;
 using GmpPlatform.Core.Reports;
 using GmpPlatform.Core.Settings;
+using GmpPlatform.Core.Tickets;
 using GmpPlatform.Revit.ShopTickets;
+using GmpPlatform.Revit.UI;
 
 namespace GmpPlatform.Revit.Commands;
 
@@ -21,36 +23,37 @@ public class GenerateWallShopTicketCommand : ExternalCommand
 
         if (!WallPanelReader.TryGetSelectedPanel(uidoc, out var panel, out var error))
         {
-            TaskDialog.Show("GMP Platform", error);
+            TicketDialogs.Problem("Select a wall panel first", error);
             return;
         }
 
+        var context = WallPanelReader.ReadContext(panel);
         var snapshot = WallPanelReader.Read(panel);
         var plan = WallShopTicketPlanner.CreatePlan(snapshot);
         var settings = SettingsStore.Load();
-        var titleBlockId = TitleBlockCatalog.ResolvePreferredId(doc, settings);
-        var titleBlockLabel = TitleBlockCatalog.Describe(doc, titleBlockId);
+        var titleBlockId = TitleBlockCatalog.ResolveForShopTicket(doc, settings, out var titleBlockNote);
 
-        var confirm = new TaskDialog("GMP Platform — Generate Wall Shop Ticket")
-        {
-            MainInstruction = $"Generate shop ticket for mark '{snapshot.Mark}'?",
-            MainContent =
-                $"Family: {snapshot.FamilyName}\n" +
-                $"Type: {snapshot.TypeName}\n" +
-                $"Size (ft): L={snapshot.LengthFt:0.###}  H={snapshot.HeightFt:0.###}  T={snapshot.ThicknessFt:0.###}\n" +
-                $"Title block: {titleBlockLabel}\n\n" +
-                $"Creates 3 sheets (TIF / BIF / Sections+BOM), opens them for review, " +
-                $"and uses auto-sized text notes.\n\n" +
-                (titleBlockId == Autodesk.Revit.DB.ElementId.InvalidElementId
-                    ? "Tip: use Shop Tickets → Settings to pick a title block before generating.\n\n"
-                    : "") +
-                (plan.Warnings.Count > 0
-                    ? "Notes:\n• " + string.Join("\n• ", plan.Warnings)
-                    : "No warnings."),
-            CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No
-        };
+        var proceed = TicketDialogs.Confirm(
+            new TicketDialogs.PieceSummary
+            {
+                Mark = snapshot.Mark,
+                Family = snapshot.FamilyName,
+                Type = snapshot.TypeName,
+                LengthIn = TicketUnits.Inches(snapshot.LengthFt),
+                HeightIn = TicketUnits.Inches(snapshot.HeightFt),
+                ThicknessIn = TicketUnits.Inches(snapshot.ThicknessFt),
+                PartTypes = snapshot.Parts.Count,
+                TitleBlock = titleBlockId == Autodesk.Revit.DB.ElementId.InvalidElementId
+                    ? ""
+                    : TitleBlockCatalog.Describe(doc, titleBlockId),
+                TitleBlockNote = titleBlockNote,
+                Notes = plan.Warnings
+            },
+            what: "Revit shop-ticket sheets",
+            goLabel: "Generate sheets",
+            goDetail: "Creates the TIF, BIF and Sections sheets in this model and opens them for review.");
 
-        if (confirm.Show() != TaskDialogResult.Yes)
+        if (!proceed)
         {
             PlatformLog.Logger.Information("Shop ticket generation cancelled by user");
             return;
@@ -63,19 +66,29 @@ public class GenerateWallShopTicketCommand : ExternalCommand
             var reportFolder = RunReportWriter.Write(plan, result);
             result.ReportPath = reportFolder;
 
+            // The hand-off the AutoCAD side consumes. Written every run so the drawing
+            // engine can be re-run, diffed and tested without opening Revit again.
+            var ticket = PieceTicketExporter.Build(panel, context);
+            var ticketPath = TicketJson.Write(ticket, reportFolder);
+            PlatformLog.Logger.Information("Piece ticket written to {Path}", ticketPath);
+
             // Open every new sheet as a tab so the user can review immediately.
             SheetNavigator.OpenSheets(uidoc, result.CreatedSheetIds);
 
-            TaskDialog.Show(
-                "GMP Platform — Done",
-                $"{result.Message}\n\n" +
-                $"Sheets (opened for review):\n• {string.Join("\n• ", result.CreatedSheetNames)}\n\n" +
-                $"Report:\n{reportFolder}");
+            TicketDialogs.Done(
+                headline: $"Shop-ticket sheets created for {snapshot.Mark}",
+                items: result.CreatedSheetNames,
+                folder: reportFolder,
+                notes: plan.Warnings);
         }
         catch (Exception ex)
         {
             PlatformLog.Logger.Error(ex, "Shop ticket generation failed");
-            TaskDialog.Show("GMP Platform — Error", ex.Message);
+            TicketDialogs.Problem(
+                $"The sheets for {snapshot.Mark} could not be created",
+                "If the error came after the sheets were made, they are still in the model — " +
+                "check the Project Browser. The details below are also in the log.",
+                ex.ToString());
         }
     }
 }
