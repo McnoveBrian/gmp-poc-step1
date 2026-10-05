@@ -44,8 +44,11 @@ internal sealed class TicketDrawer
     /// <summary>Openings sharing start and stop stations, dimensioned together.</summary>
     private readonly IReadOnlyList<OpeningGroup> _openingGroups;
 
-    /// <summary>Parts with no block in the client library; reported rather than drawn.</summary>
-    private readonly List<string> _unresolvedParts = new();
+    /// <summary>One resolver for the whole drawing, so each missing block is reported once.</summary>
+    private readonly PartBlockResolver _resolver;
+
+    /// <summary>Hardware parts (EMS studs and plates on an insert), each with its host part.</summary>
+    private readonly IReadOnlyDictionary<string, string> _hardware;
 
     /// <summary>Station callouts drawn for the view currently being built.</summary>
     private int _stationCallouts;
@@ -130,6 +133,11 @@ internal sealed class TicketDrawer
             ? $"generated reinforcement: on ({_rebar.Count} group(s))"
             : "generated reinforcement: off (DrawGeneratedRebar); reinforcement is added by the drafter");
 
+        _resolver = new PartBlockResolver(db, tr, log);
+        _hardware = AssemblyHardware.Find(ticket.Parts);
+        if (_hardware.Count > 0)
+            _log.Info($"assembly hardware (no BOM row): {string.Join(", ", _hardware.Select(h => $"{h.Key} on {h.Value}"))}");
+
         _openings = OpeningPlan.Find(ticket.Geometry);
         _openingGroups = OpeningPlan.Group(_openings, ticket.Dimensions.HeightIn);
         if (_openings.Count > 0)
@@ -187,16 +195,12 @@ internal sealed class TicketDrawer
     private void DrawPieceView(SheetWindow sheet, string face, bool drawNotes)
     {
         // Decide what is drawable before fitting, so the space the sheet reserves and the
-        // content it ends up with are the same set. Parts with no block in the client library
-        // get neither a symbol nor a callout: the approved ticket has no block, callout or BOM
-        // row for EMS016/018/325 either, because they are components of the INS087 assemblies
-        // that carry them. They are listed in the derived note instead of drawn.
+        // content it ends up with are the same set. Assembly hardware (EMS parts that only ever
+        // sit on another part) gets no symbol, callout or BOM row, as on the approved ticket,
+        // and neither does a part with no block in the client library. Both are named in the
+        // derived note instead.
         var parts = PartsOnFace(face);
-        var probe = new PartBlockResolver(_db, _tr, _log);
-        foreach (var part in parts.Where(p => !probe.CanResolve(p.PartNumber)))
-            _unresolvedParts.AddRange(Enumerable.Repeat(part.PartNumber, part.Instances.Count));
-
-        var drawable = parts.Where(p => probe.CanResolve(p.PartNumber)).ToList();
+        var drawable = parts.Where(p => !_hardware.ContainsKey(p.PartNumber) && _resolver.CanResolve(p.PartNumber)).ToList();
 
         var isTif = face.Equals("TIF", StringComparison.OrdinalIgnoreCase);
         var window = FitToPiece(sheet.Main!.Value, drawable, annotateOpenings: isTif);
@@ -898,32 +902,17 @@ internal sealed class TicketDrawer
     private int DrawParts(Point3d origin, IReadOnlyList<TicketPart> parts)
     {
         var placed = 0;
-        var resolver = new PartBlockResolver(_db, _tr, _log);
 
         foreach (var part in parts)
         {
             foreach (var instance in part.Instances)
             {
                 var point = new Point3d(StationX(origin, instance.X), origin.Y + instance.Y, 0);
-                if (resolver.TryInsert(part.PartNumber, instance.Face, point, out var blockRef))
-                {
-                    blockRef!.Layer = EnsureLayer(LayerInsert, 7);
-                    Append(blockRef);
-                }
-                else
-                {
-                    // No block for this part in the client library. These used to draw as red
-                    // placeholder markers so the gap stayed visible, which was right until we
-                    // checked what they are: EMS016/018/325 appear nowhere on the approved
-                    // ticket — no block, no callout, no BOM row — because they are components
-                    // of the INS087 assemblies that carry them, exactly like the HCA studs
-                    // listed inside an embed's description. Twenty-four red circles for items
-                    // the drafter never draws reads as a broken sheet. They are reported in
-                    // the derived note instead, so they are still accounted for, not hidden.
-                    _unresolvedParts.Add(part.PartNumber);
+                if (!_resolver.TryInsert(part.PartNumber, instance.Face, point, out var blockRef))
                     continue;
-                }
 
+                blockRef!.Layer = EnsureLayer(LayerInsert, 7);
+                Append(blockRef);
                 placed++;
             }
         }
@@ -1426,8 +1415,10 @@ internal sealed class TicketDrawer
 
         // Parts first, then rule-generated rebar, then the concrete rows, mirroring the
         // approved ticket's ordering. Derived rebar carries a trailing "*" tied to the
-        // derived note, so a BOM row never looks read when it was computed.
+        // derived note, so a BOM row never looks read when it was computed. Assembly
+        // hardware has no row of its own; it is named in the derived note.
         var lines = _ticket.Parts
+            .Where(p => !_hardware.ContainsKey(p.PartNumber))
             .OrderBy(p => p.PartNumber, StringComparer.OrdinalIgnoreCase)
             .Select(p => (No: p.PartNumber, Qty: p.Quantity.ToString("0.##")))
             .ToList();
@@ -1500,17 +1491,28 @@ internal sealed class TicketDrawer
         if (_ticket.Quantities.ReleaseStrengthPsi == 0 || _ticket.Quantities.TwentyEightDayStrengthPsi == 0)
             items.Add("release / 28-day strengths not available in the model");
 
-        if (_unresolvedParts.Count > 0)
+        if (_hardware.Count > 0)
         {
-            var summary = _unresolvedParts
-                .GroupBy(p => p)
-                .OrderBy(g => g.Key)
-                .Select(g => $"{g.Key} x{g.Count()}");
+            var byHost = _hardware
+                .GroupBy(h => h.Value, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => $"{string.Join(", ", g.Select(h => h.Key).OrderBy(k => k, StringComparer.OrdinalIgnoreCase))} on {g.Key}");
             items.Add(
-                $"not drawn - no block in the seed library and no callout, BOM row or block " +
-                $"for them on the approved ticket either: {string.Join(", ", summary)}. " +
-                "Confirm they belong to a parent item rather than being drawn separately.");
+                $"not drawn and left off the BOM as assembly hardware, as on the approved ticket: " +
+                $"{string.Join("; ", byHost)}");
         }
+
+        var blockless = _ticket.Parts
+            .Where(p => p.Instances.Count > 0 &&
+                        !_hardware.ContainsKey(p.PartNumber) &&
+                        !_resolver.CanResolve(p.PartNumber))
+            .OrderBy(p => p.PartNumber, StringComparer.OrdinalIgnoreCase)
+            .Select(p => $"{p.PartNumber} x{p.Instances.Count}")
+            .ToList();
+        if (blockless.Count > 0)
+            items.Add(
+                $"not drawn - no block in the seed library: {string.Join(", ", blockless)}. " +
+                "Still on the BOM; add the block to the seed to draw them.");
 
         items.AddRange(_ticket.Warnings);
 

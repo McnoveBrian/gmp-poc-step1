@@ -80,7 +80,7 @@ internal sealed class PartBlockResolver
                 b.Name.Contains(partNumber, StringComparison.OrdinalIgnoreCase)).Id;
 
         if (match.IsNull && _reported.Add(partNumber))
-            _log.Warn($"No block in the seed library matches part {partNumber}; a marker was drawn instead.");
+            _log.Warn($"No block in the seed library matches part {partNumber}; it is not drawn and is listed in the derived note.");
 
         _byPart[partNumber] = match;
         return match;

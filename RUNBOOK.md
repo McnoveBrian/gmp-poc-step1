@@ -79,9 +79,10 @@ installed; `-Uninstall` removes it; `-AllUsers` (elevated) installs for every us
 dotnet test tests\GmpPlatform.Core.Tests\GmpPlatform.Core.Tests.csproj
 ```
 
-77 tests, about a second. They cover the hand-off contract, the unit rounding, the client's
+90 tests, about a second. They cover the hand-off contract, the unit rounding, the client's
 drafting conventions — the station direction, the piece placement, the callout offset — which
-layout gets which sheet, and how a standards profile is read. If one
+layout gets which sheet, how a standards profile is read, how blockouts are found and
+numbered, and which parts are treated as assembly hardware. If one
 of the `SheetConventions` tests fails, the sheet is about to come out mirrored or offset;
 that is what they are there to stop.
 
@@ -263,6 +264,8 @@ Quoting only one has already been misleading once.
 | Ticket Drawing freezes Revit for ~5 minutes | an old build: plotting left the drawing modified and `QUIT` waited on a hidden prompt. Fixed in `AcadRunner`; rebuild |
 | Settings ignored, defaults used | `settings.json` failed to parse; the reason is in the platform log and in the *seed not set* dialog |
 | A cut-out has no *B.O.-n* stub, width or BLOCKOUT column | it touches a panel end (an end pocket, like FIP-1171's two 8" pockets). Only inner loops and cut-outs from the top or bottom edge are blockouts; end cut-outs belong to the edge details. The draw log's `openings:` line lists what was numbered |
+| An EMS part has no symbol, callout or BOM row | it sits on another part at every one of its locations (EMS016/018/325 on INS087), so it is treated as that part's hardware, as on the approved AFIP-1035 ticket. The derived note and the draw log's `assembly hardware` line name it. An EMS part anywhere on its own is still drawn and listed |
+| A part is on the BOM but not drawn | the seed has no block for it. The draw log warns once per part and the derived note lists it; add the block to the seed |
 
 The *"Build says succeeded but nothing changed"* row is worth taking seriously. More than once in
 this project a step reported success without doing anything. **When a build or a run claims
