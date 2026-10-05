@@ -37,12 +37,14 @@
 
       The engine is .NET 8 (it runs inside AutoCAD) while the R24 add-in is .NET Framework 4.8,
       so the framework compatibility check is skipped and the engine builds for its own target.
+      No SetTargetFramework: the engine has a single target, and passing one makes this a
+      second instance of the engine beside the solution's own, which then compiles into the
+      same obj folder in parallel and fails with CS2012 (file in use).
     -->
     <ProjectReference Include="..\GmpPlatform.Acad\GmpPlatform.Acad.csproj"
                       ReferenceOutputAssembly="false"
                       Private="false"
                       SkipGetTargetFrameworkProperties="true"
-                      SetTargetFramework="TargetFramework=net8.0-windows"
                       SetConfiguration="Configuration=Release" />
   </ItemGroup>
 
