@@ -110,6 +110,16 @@ public sealed class StandardsProfile
         public string StartPanel { get; set; } = "START PANEL";
         public string StopPanel { get; set; } = "STOP PANEL";
         public string MarkEnd { get; set; } = "MARK END";
+
+        /// <summary>Opening name before its numbers: "B.O.-" gives "B.O.-2,3".</summary>
+        public string OpeningPrefix { get; set; } = "B.O.-";
+
+        /// <summary>Heading of an opening's dimension column beside the piece: "BLOCKOUT-1".</summary>
+        public string OpeningColumnPrefix { get; set; } = "BLOCKOUT-";
+
+        /// <summary>Stub labels at an opening's two stations: "START B.O.-1", "STOP B.O.-1".</summary>
+        public string OpeningStart { get; set; } = "START";
+        public string OpeningStop { get; set; } = "STOP";
     }
 }
 

@@ -262,6 +262,7 @@ Quoting only one has already been misleading once.
 | Security prompt again after an update | expected for an unsigned add-in — Revit trusts the exact DLL (§4) |
 | Ticket Drawing freezes Revit for ~5 minutes | an old build: plotting left the drawing modified and `QUIT` waited on a hidden prompt. Fixed in `AcadRunner`; rebuild |
 | Settings ignored, defaults used | `settings.json` failed to parse; the reason is in the platform log and in the *seed not set* dialog |
+| A cut-out has no *B.O.-n* stub, width or BLOCKOUT column | it touches a panel end (an end pocket, like FIP-1171's two 8" pockets). Only inner loops and cut-outs from the top or bottom edge are blockouts; end cut-outs belong to the edge details. The draw log's `openings:` line lists what was numbered |
 
 The *"Build says succeeded but nothing changed"* row is worth taking seriously. More than once in
 this project a step reported success without doing anything. **When a build or a run claims

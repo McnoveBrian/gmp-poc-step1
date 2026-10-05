@@ -21,6 +21,21 @@ public static class SheetConventions
     public const double RightColumnReserve = 131.6;
 
     /// <summary>
+    /// Piece edge to the first vertical dimension column, in inches. On the approved sheet the
+    /// first column (℄ (2) PAS018) stands 16" clear of the START PANEL edge.
+    /// </summary>
+    public const double RightColumnFirstOffset = 16.0;
+
+    /// <summary>
+    /// Spacing of the vertical dimension columns at 1:64; scale it with the view, as the text
+    /// it makes room for scales. The approved sheet's run 11" to 21" apart, set by eye around
+    /// their text. A column's values sit left of its line and an opening span's "(B.O.-n)"
+    /// right of it, so the gap between two columns holds a line of text from each: 18" let
+    /// them touch, 24" keeps them apart.
+    /// </summary>
+    public const double RightColumnStep = 24.0;
+
+    /// <summary>
     /// How far right of its station a callout's text sits. The drafter sets the label beside
     /// the dimension that locates it, not on top of it. With the piece correctly placed, all
     /// four <c>INS087</c> callouts came out a constant 20.9" left of the approved's, with no
@@ -84,6 +99,26 @@ public static class SheetConventions
     /// </summary>
     public static double PieceOriginX(double windowCenterX, double pieceLengthIn) =>
         windowCenterX - RightColumnReserve / 2.0 - pieceLengthIn / 2.0;
+
+    /// <summary>
+    /// Viewport top edge down to the overall length string, in <b>paper</b> inches. The
+    /// approved sheets are composed from the top, not centred: the 46'-3" string sits 0.30"
+    /// below the main viewport's top on sheet 1 and 0.40" on sheet 2, and the piece hangs
+    /// below its annotation, leaving the lower sheet to the SIF view, notes and details.
+    /// Centring put the piece 1.24" (sheet 1) and 2.13" (sheet 2) lower than the approved,
+    /// and on sheet 2 into the row of edge details.
+    /// </summary>
+    public const double TopMarginPaper = 0.30;
+
+    /// <summary>
+    /// Bottom of the piece in its view window, composed from the top: the window's top edge,
+    /// less the margin, the annotation stacked above the piece, and the piece itself.
+    /// </summary>
+    /// <param name="windowTop">Top of the window, model inches.</param>
+    /// <param name="annotationScale">Viewport scale factor (64 at 3/16" = 1'-0").</param>
+    /// <param name="annotationAboveIn">Piece top up to the overall length string, model inches.</param>
+    public static double PieceOriginY(double windowTop, double annotationScale, double pieceHeightIn, double annotationAboveIn) =>
+        windowTop - TopMarginPaper * annotationScale - annotationAboveIn - pieceHeightIn;
 
     /// <summary>Whether an item at this height is annotated off the bottom edge.</summary>
     public static bool IsBottomEdge(double yIn) => yIn <= EdgeBandTolerance;

@@ -38,11 +38,36 @@ internal sealed class TicketDrawer
     private readonly RebarRules _rebarRules = new();
     private readonly IReadOnlyList<RebarGroup> _rebar;
 
+    /// <summary>Inner loops and top/bottom-edge cut-outs, numbered B.O.-1, B.O.-2, ...</summary>
+    private readonly IReadOnlyList<PlannedOpening> _openings;
+
+    /// <summary>Openings sharing start and stop stations, dimensioned together.</summary>
+    private readonly IReadOnlyList<OpeningGroup> _openingGroups;
+
     /// <summary>Parts with no block in the client library; reported rather than drawn.</summary>
     private readonly List<string> _unresolvedParts = new();
 
     /// <summary>Station callouts drawn for the view currently being built.</summary>
     private int _stationCallouts;
+
+    /// <summary>Dimension chains stacked below the piece in the view currently being built.</summary>
+    private int _belowChains;
+
+    /// <summary>
+    /// How far the SIF view and the notes under it move down to clear the chains below the
+    /// piece. <see cref="SheetConventions.SifOffset"/> was measured on a sheet with one chain
+    /// below, so one costs nothing and each further chain takes one band.
+    /// </summary>
+    private double SifDrop => Math.Max(0, _belowChains - 1) * ChainBandStep + _belowExtra;
+
+    /// <summary>Room below the piece beyond whole bands (the opening width row's extra half).</summary>
+    private double _belowExtra;
+
+    /// <summary>
+    /// Height above the piece's base for the overall length string: the next free band beyond
+    /// every chain above the piece, which is where the approved ticket runs its 46'-3".
+    /// </summary>
+    private double _overallAbove;
 
     /// <summary>
     /// Where the TIF piece was actually drawn: after the window was fitted to the piece and the
@@ -104,7 +129,17 @@ internal sealed class TicketDrawer
         _log.Info(settings.DrawGeneratedRebar
             ? $"generated reinforcement: on ({_rebar.Count} group(s))"
             : "generated reinforcement: off (DrawGeneratedRebar); reinforcement is added by the drafter");
+
+        _openings = OpeningPlan.Find(ticket.Geometry);
+        _openingGroups = OpeningPlan.Group(_openings, ticket.Dimensions.HeightIn);
+        if (_openings.Count > 0)
+        {
+            _log.Info($"openings: {string.Join("; ", _openings.Select(o =>
+                $"{OpeningLabel(o.Number.ToString())} {o.Kind} {o.Width:0.###} x {o.Height:0.###} at station {o.MinX:0.###}, y {o.MinY:0.###}"))}");
+        }
     }
+
+    private string OpeningLabel(string numbers) => _standards.Labels.OpeningPrefix + numbers;
 
     public void Draw()
     {
@@ -163,18 +198,22 @@ internal sealed class TicketDrawer
 
         var drawable = parts.Where(p => probe.CanResolve(p.PartNumber)).ToList();
 
-        var window = FitToPiece(sheet.Main!.Value, drawable);
+        var isTif = face.Equals("TIF", StringComparison.OrdinalIgnoreCase);
+        var window = FitToPiece(sheet.Main!.Value, drawable, annotateOpenings: isTif);
 
         // The piece is not centred in its window: the approved sheet keeps a band clear on the
         // right for the stub-dimension column that reads down the side of the piece, so the
         // piece sits left of centre. Centring it put our content half a column out of step
-        // with theirs on every overlay.
+        // with theirs on every overlay. Vertically the sheet is composed from the top down
+        // (SheetConventions.TopMarginPaper).
+        var annotationScale = window.AnnotationScale > 0 ? window.AnnotationScale : 64.0;
         var origin = new Point3d(
             SheetConventions.PieceOriginX(window.CenterX, _ticket.Dimensions.LengthIn),
-            window.CenterY - _ticket.Dimensions.HeightIn / 2.0,
+            SheetConventions.PieceOriginY(
+                window.CenterY + window.Height / 2.0, annotationScale, _ticket.Dimensions.HeightIn,
+                AnnotationAbove(drawable, isTif, annotationScale)),
             0);
 
-        var annotationScale = window.AnnotationScale > 0 ? window.AnnotationScale : 64.0;
         if (face.Equals("TIF", StringComparison.OrdinalIgnoreCase)) _tifOrigin = origin;
 
         _log.Info($"--- {sheet.Layout}: {face} view, window centre ({window.CenterX:N1}, " +
@@ -195,9 +234,12 @@ internal sealed class TicketDrawer
         var placed = DrawParts(origin, drawable);
 
         _stationCallouts = 0;
+        _belowChains = 0;
+        _belowExtra = 0;
         _calloutRows.Clear();   // collision tracking is per view
-        var chains = DrawStubChains(origin, annotationScale, drawable);
+        var chains = DrawStubChains(origin, annotationScale, drawable, annotateOpenings: isTif);
         var callouts = _stationCallouts;
+        if (isTif) DrawOpeningColumns(origin, annotationScale);
         if (face.Equals("TIF", StringComparison.OrdinalIgnoreCase)) DrawSifView(origin, annotationScale, parts);
         DrawOverallDimensions(origin, annotationScale);
         DrawViewTitle(origin, annotationScale, face);
@@ -236,7 +278,7 @@ internal sealed class TicketDrawer
     /// template serve marks of different sizes.
     /// </para>
     /// </summary>
-    private ViewWindow FitToPiece(ViewWindow window, IReadOnlyList<TicketPart> drawable)
+    private ViewWindow FitToPiece(ViewWindow window, IReadOnlyList<TicketPart> drawable, bool annotateOpenings)
     {
         var d = _ticket.Dimensions;
 
@@ -244,9 +286,8 @@ internal sealed class TicketDrawer
         // items sit on, so both directions are counted the same way the drawing allocates
         // them — a fit estimate that assumes everything stacks upward either wastes space
         // above or overruns the SIF view below.
-        var drawn = drawable.Where(p => p.Instances.Count > 0).ToList();
-        var chainsBelow = drawn.Count(p => p.Instances.Any(i => SheetConventions.IsBottomEdge(i.Y)));
-        var chainsAbove = drawn.Count(p => p.Instances.Any(i => !SheetConventions.IsBottomEdge(i.Y)));
+        var chainsBelow = ChainBands(drawable, annotateOpenings, below: true);
+        var chainsAbove = ChainBands(drawable, annotateOpenings, below: false);
 
         var calloutRun = SheetConventions.CalloutRun(window.AnnotationScale > 0 ? window.AnnotationScale : 64.0);
         var above = CalloutBandGap + calloutRun + ChainBandBase + chainsAbove * ChainBandStep + 30.0;
@@ -318,7 +359,7 @@ internal sealed class TicketDrawer
         var outer = d.WytheOuterIn > 0 ? d.WytheOuterIn : thickness / 3.0;
         var inner = d.WytheInnerIn > 0 ? d.WytheInnerIn : thickness / 3.0;
 
-        var bottom = origin.Y - SifOffset;
+        var bottom = origin.Y - SifOffset - SifDrop;
         var top = bottom + thickness;
         var left = origin.X;
         var right = origin.X + d.LengthIn;
@@ -829,8 +870,16 @@ internal sealed class TicketDrawer
         foreach (var opening in _ticket.Geometry.Openings)
             AddPolyline(opening, origin, LayerPanel, closed: true);
 
+        // The client marks every blockout, inner or cut from an edge, with a diagonal cross
+        // corner to corner, on both the TIF and the BIF sheet.
+        foreach (var o in _openings)
+        {
+            AddLine(StationX(origin, o.MinX), origin.Y + o.MinY, StationX(origin, o.MaxX), origin.Y + o.MaxY, LayerPanel);
+            AddLine(StationX(origin, o.MinX), origin.Y + o.MaxY, StationX(origin, o.MaxX), origin.Y + o.MinY, LayerPanel);
+        }
+
         _log.Info($"outline: {_ticket.Geometry.Outline.Count} vertices, " +
-                  $"{_ticket.Geometry.Openings.Count} opening(s)");
+                  $"{_ticket.Geometry.Openings.Count} inner loop(s), {_openings.Count} opening(s) marked");
     }
 
     private void AddPolyline(IReadOnlyList<Point2> points, Point3d origin, string layer, bool closed)
@@ -898,7 +947,7 @@ internal sealed class TicketDrawer
     /// <c>℄ (2) PAS018 (TIF)</c> comes from.
     /// </para>
     /// </summary>
-    private int DrawStubChains(Point3d origin, double annotationScale, IReadOnlyList<TicketPart> parts)
+    private int DrawStubChains(Point3d origin, double annotationScale, IReadOnlyList<TicketPart> parts, bool annotateOpenings)
     {
         var dimStyleId = DimStyleId();
         var chains = 0;
@@ -915,6 +964,23 @@ internal sealed class TicketDrawer
         var aboveBand = height + CalloutBandGap + calloutRun + ChainBandBase;
         var belowBand = -(CalloutBandGap + calloutRun + ChainBandBase);
 
+        _overallAbove = height + ChainBandBase;
+
+        void NextBand(bool below)
+        {
+            if (below)
+            {
+                belowBand -= ChainBandStep;
+                _belowChains++;
+            }
+            else
+            {
+                aboveBand += ChainBandStep;
+                _overallAbove = aboveBand;
+            }
+            chains++;
+        }
+
         foreach (var part in parts.Where(p => p.Instances.Count > 0))
         {
             // Bottom-edge items are annotated below the piece, everything else above.
@@ -925,28 +991,177 @@ internal sealed class TicketDrawer
                 var below = group.Key;
                 var y = origin.Y + (below ? belowBand : aboveBand);
 
-                var xs = group.Select(i => i.X).Distinct().OrderBy(x => x).ToList();
+                var instances = group.ToList();
+                var xs = instances.Select(i => i.X).Distinct().OrderBy(x => x).ToList();
                 DrawChainStations(
-                    origin, annotationScale, dimStyleId, part, group.ToList(), xs, y,
-                    below, below ? calloutBelow : calloutAbove);
+                    origin, annotationScale, dimStyleId, xs,
+                    x => StationCalloutText(part, instances.Where(i => Math.Abs(i.X - x) < 0.05).ToList()),
+                    CalloutStationOffset, y, below, below ? calloutBelow : calloutAbove);
+                NextBand(below);
+            }
+        }
 
-                if (below) belowBand -= ChainBandStep; else aboveBand += ChainBandStep;
-                chains++;
+        if (!annotateOpenings) return chains;
+
+        // Openings beyond the parts, one chain per side: the START and STOP stations of every
+        // opening off that edge, then a row of their widths. "22'-8¼" STOP B.O.-1" and
+        // "5'-0½" (B.O.-1)" on the approved ticket.
+        foreach (var below in new[] { true, false })
+        {
+            var groups = _openingGroups.Where(g => g.Below == below).ToList();
+            if (groups.Count == 0) continue;
+
+            var stations = groups
+                .SelectMany(g => new[] { (X: g.Start, Text: $"{_standards.Labels.OpeningStart} {OpeningLabel(g.Numbers)}"),
+                                         (X: g.Stop, Text: $"{_standards.Labels.OpeningStop} {OpeningLabel(g.Numbers)}") })
+                .GroupBy(s => Math.Round(s.X / OpeningPlan.Tolerance))
+                .Select(s => (X: s.First().X, Text: string.Join(" & ", s.Select(t => t.Text))))
+                .OrderBy(s => s.X)
+                .ToList();
+
+            // An opening's label sits right beside its own station line, as "STOP B.O.-1" does
+            // on the approved ticket. The parts' measured offset would put a narrow opening's
+            // STOP label over its START line. The anchor is the text's far side, so the offset
+            // is one text height plus a gap.
+            DrawChainStations(
+                origin, annotationScale, dimStyleId, stations.Select(s => s.X).ToList(),
+                x => stations.First(s => Math.Abs(s.X - x) < 0.05).Text,
+                (3.5 + 1.0) * annotationScale / 64.0,
+                origin.Y + (below ? belowBand : aboveBand), below, below ? calloutBelow : calloutAbove);
+            NextBand(below);
+
+            // Anchored on the row itself: extension lines from the piece edge would cut through
+            // the callouts and the station chain between. The row carries text on both sides of
+            // its line, so it is set a quarter band further out and takes a band and a half.
+            var widthY = origin.Y + (below ? belowBand - WidthRowInset : aboveBand + WidthRowInset);
+            foreach (var g in groups)
+            {
+                var width = new RotatedDimension
+                {
+                    XLine1Point = new Point3d(StationX(origin, g.Start), widthY, 0),
+                    XLine2Point = new Point3d(StationX(origin, g.Stop), widthY, 0),
+                    DimLinePoint = new Point3d(StationX(origin, (g.Start + g.Stop) / 2.0), widthY, 0),
+                    Rotation = 0,
+                    DimensionText = $"<>\\X({OpeningLabel(g.Numbers)})",
+                    DimensionStyle = dimStyleId,
+                    Layer = EnsureLayer(LayerDims, 7)
+                };
+                DimensionPresets.Linear.ApplyTo(width, annotationScale);
+                Append(width);
+            }
+            NextBand(below);
+            if (below)
+            {
+                belowBand -= ChainBandStep / 2.0;
+                _belowExtra += ChainBandStep / 2.0;
+            }
+            else
+            {
+                aboveBand += ChainBandStep / 2.0;
+                _overallAbove = aboveBand;
             }
         }
 
         return chains;
     }
 
+    /// <summary>
+    /// Dimension bands stacked off one edge, counted the way <see cref="DrawStubChains"/>
+    /// allocates them: one per part with items on that edge, and for openings a station chain
+    /// plus a width row of a band and a half.
+    /// </summary>
+    private double ChainBands(IReadOnlyList<TicketPart> drawable, bool annotateOpenings, bool below)
+    {
+        var parts = drawable
+            .Where(p => p.Instances.Count > 0)
+            .Count(p => p.Instances.Any(i => SheetConventions.IsBottomEdge(i.Y) == below));
+        var openings = annotateOpenings && _openingGroups.Any(g => g.Below == below) ? 2.5 : 0.0;
+        return parts + openings;
+    }
 
-    /// <summary>Draws one chain's ordinate dimensions and its per-station callouts.</summary>
+    /// <summary>Piece top up to the overall length string, as <see cref="DrawStubChains"/> leaves it.</summary>
+    private double AnnotationAbove(IReadOnlyList<TicketPart> drawable, bool annotateOpenings, double annotationScale)
+    {
+        var bands = ChainBands(drawable, annotateOpenings, below: false);
+        return bands > 0
+            ? CalloutBandGap + SheetConventions.CalloutRun(annotationScale) + ChainBandBase + bands * ChainBandStep
+            : ChainBandBase;
+    }
+
+    /// <summary>How far the width row sits beyond the start of its band.</summary>
+    private const double WidthRowInset = ChainBandStep / 4.0;
+
+    /// <summary>
+    /// One vertical chain per opening group in the dimension column beside the START PANEL
+    /// end, headed "BLOCKOUT-1": the height split at the opening's bottom and top, the span
+    /// that is the opening labelled "(B.O.-1)", as the approved ticket's column reads.
+    /// </summary>
+    private void DrawOpeningColumns(Point3d origin, double annotationScale)
+    {
+        if (_openingGroups.Count == 0) return;
+
+        var dimStyleId = DimStyleId();
+        var height = _ticket.Dimensions.HeightIn;
+        var edgeX = StationX(origin, 0);
+        var textHeight = 3.5 * annotationScale / 64.0;
+
+        // The first column stands where the approved sheet's does, unless our SOLID ZONE label
+        // (set beside the top corner, where the approved sets it above) is in the way.
+        var first = SheetConventions.RightColumnFirstOffset;
+        var d = _ticket.Dimensions;
+        if (d.InsulationLengthIn > 0 && d.InsulationLengthIn < d.LengthIn && d.SolidZoneTopIn > 0)
+        {
+            var label = $"{TicketUnits.FeetInches(d.SolidZoneTopIn)} {_standards.Labels.SolidZone}";
+            first = Math.Max(first, 4.0 + label.Length * (3.0 * annotationScale / 64.0) * 0.62 + 2.0 * textHeight);
+        }
+
+        var step = SheetConventions.RightColumnStep * annotationScale / 64.0;
+        var lastX = first + (_openingGroups.Count - 1) * step;
+        if (lastX > RightColumnReserve)
+            _log.Warn($"{_openingGroups.Count} opening columns need more than the {RightColumnReserve:0}\" kept clear beside the piece; the outer ones may overlap the title block.");
+
+        for (var k = 0; k < _openingGroups.Count; k++)
+        {
+            var group = _openingGroups[k];
+            var x = edgeX + first + k * step;
+
+            foreach (var span in group.VerticalSpans(height))
+            {
+                var dim = new RotatedDimension
+                {
+                    XLine1Point = new Point3d(x, origin.Y + span.From, 0),
+                    XLine2Point = new Point3d(x, origin.Y + span.To, 0),
+                    DimLinePoint = new Point3d(x, origin.Y + (span.From + span.To) / 2.0, 0),
+                    Rotation = Math.PI / 2,
+                    DimensionStyle = dimStyleId,
+                    Layer = EnsureLayer(LayerDims, 7)
+                };
+                if (span.Opening is int n) dim.DimensionText = $"<>\\X({OpeningLabel(n.ToString())})";
+                DimensionPresets.Stub.ApplyTo(dim, annotationScale);
+                Append(dim);
+            }
+
+            Append(new MText
+            {
+                Contents = _standards.Labels.OpeningColumnPrefix + group.Numbers,
+                Location = new Point3d(x, origin.Y + height + CalloutBandGap, 0),
+                Rotation = Math.PI / 2,
+                Attachment = AttachmentPoint.BottomLeft,
+                TextHeight = textHeight,
+                Layer = EnsureLayer(LayerText, 7),
+                TextStyleId = TextStyleId()
+            });
+        }
+    }
+
+    /// <summary>Draws one chain's ordinate dimensions and the callout at each station.</summary>
     private void DrawChainStations(
         Point3d origin,
         double annotationScale,
         ObjectId dimStyleId,
-        TicketPart part,
-        IReadOnlyList<PartInstance> instances,
         IReadOnlyList<double> xs,
+        Func<double, string> calloutText,
+        double calloutOffset,
         double y,
         bool below,
         double calloutBaseline)
@@ -980,7 +1195,6 @@ internal sealed class TicketDrawer
                 // vertical "℄ (n) PARTNO (FACE)" is the band that gives the approved ticket its
                 // texture. One label per part type, placed at the average x with a long
                 // horizontal leader, was our invention and looked nothing like it.
-                var atStation = instances.Where(i => Math.Abs(i.X - x) < 0.05).ToList();
 
                 // If another part already labels this station, step this one out past it
                 // rather than printing over it. Rounded to the inch so near-identical
@@ -992,12 +1206,17 @@ internal sealed class TicketDrawer
                 var rowOffset = row * (SheetConventions.CalloutRun(annotationScale) + CalloutBandGap);
                 var baseline = below ? calloutBaseline - rowOffset : calloutBaseline + rowOffset;
 
+                // Rotated to read up the sheet, so the attachment names the text's own frame:
+                // "Right" is its upper end. Above the piece a callout starts at the band and
+                // reads away from it; below, it must END at the band — anchored by its start,
+                // a callout below the piece ran back up across the bottom edge into the panel.
+                // Both keep the text on the same side of the anchor.
                 var callout = new MText
                 {
-                    Contents = StationCalloutText(part, atStation),
-                    Location = new Point3d(StationX(origin, x) + CalloutStationOffset, baseline, 0),
+                    Contents = calloutText(x),
+                    Location = new Point3d(StationX(origin, x) + calloutOffset, baseline, 0),
                     Rotation = Math.PI / 2,
-                    Attachment = below ? AttachmentPoint.TopLeft : AttachmentPoint.BottomLeft,
+                    Attachment = below ? AttachmentPoint.BottomRight : AttachmentPoint.BottomLeft,
                     TextHeight = 3.5 * annotationScale / 64.0,
                     Layer = EnsureLayer(LayerText, 7),
                     TextStyleId = TextStyleId()
@@ -1084,11 +1303,13 @@ internal sealed class TicketDrawer
         var length = _ticket.Dimensions.LengthIn;
         var height = _ticket.Dimensions.HeightIn;
 
+        // Over the top of everything, as on both approved sheets. Run 20" under the piece it
+        // cut straight through the callouts of every part annotated off the bottom edge.
         var overall = new RotatedDimension
         {
-            XLine1Point = origin,
-            XLine2Point = new Point3d(origin.X + length, origin.Y, 0),
-            DimLinePoint = new Point3d(origin.X + length / 2.0, origin.Y - 20.0, 0),
+            XLine1Point = new Point3d(origin.X, origin.Y + height, 0),
+            XLine2Point = new Point3d(origin.X + length, origin.Y + height, 0),
+            DimLinePoint = new Point3d(origin.X + length / 2.0, origin.Y + _overallAbove, 0),
             Rotation = 0,
             DimensionStyle = dimStyleId,
             Layer = EnsureLayer(LayerDims, 7)
@@ -1301,7 +1522,7 @@ internal sealed class TicketDrawer
         var note = new MText
         {
             Contents = text,
-            Location = new Point3d(origin.X, origin.Y - SifOffset - 70.0, 0),
+            Location = new Point3d(origin.X, origin.Y - SifOffset - SifDrop - 70.0, 0),
             TextHeight = 3.0 * annotationScale / 64.0,
             Width = _ticket.Dimensions.LengthIn * 0.6,
             Layer = EnsureLayer(LayerDerived, 1),

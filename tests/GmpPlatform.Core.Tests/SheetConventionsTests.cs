@@ -74,6 +74,31 @@ public class SheetConventionsTests
         Assert.Equal(xs.OrderBy(x => x), xs);
     }
 
+    /// <summary>
+    /// Sheet 1's main viewport is 632" tall at 1:64 with its top 0.376" below the paper edge;
+    /// the approved overall string is at 0.675" and the piece top at 2.937". Composed from the
+    /// top with that sheet's 144.8" of annotation above the piece, the piece top lands there.
+    /// </summary>
+    [Fact]
+    public void Piece_is_composed_from_the_top_of_its_window()
+    {
+        const double windowTop = 1000.0;
+        const double height = 145.5;
+        var originY = SheetConventions.PieceOriginY(windowTop, 64, height, annotationAboveIn: 144.8);
+
+        var pieceTopBelowWindowTopPaper = (windowTop - (originY + height)) / 64.0;
+        Assert.Equal(2.937 - 0.376, pieceTopBelowWindowTopPaper, 2);
+    }
+
+    [Fact]
+    public void Less_annotation_above_lifts_the_piece()
+    {
+        var crowded = SheetConventions.PieceOriginY(1000, 64, 145.5, annotationAboveIn: 150);
+        var sparse = SheetConventions.PieceOriginY(1000, 64, 145.5, annotationAboveIn: 20);
+
+        Assert.Equal(130.0, sparse - crowded, 6);
+    }
+
     [Fact]
     public void Piece_is_not_centred_in_its_window()
     {

@@ -174,8 +174,9 @@ internal static class DimensionPresets
 
     /// <summary>
     /// The presets the engine actually applies today, one per kind of dimension it draws:
-    /// ordinate stub chains, overall strings, and the tight dimensions inside sections. The
-    /// rest of the catalogue is measured and waiting for the call sites that need it.
+    /// stub chains and columns, overall strings, opening widths, and the tight dimensions
+    /// inside sections. The rest of the catalogue is measured and waiting for the call sites
+    /// that need it.
     /// </summary>
-    public static readonly IReadOnlyList<DimensionPreset> InUse = new[] { Stub, Overall, TightFit };
+    public static readonly IReadOnlyList<DimensionPreset> InUse = new[] { Stub, Overall, Linear, TightFit };
 }
