@@ -69,6 +69,15 @@ public static class SheetConventions
         originX + pieceLengthIn - station;
 
     /// <summary>
+    /// Orders items the way they read across the sheet, left to right. Because stations run
+    /// right to left, that is <b>descending</b> station: ordering by station instead letters
+    /// sections from the right-hand end, backwards against everything else on the view.
+    /// </summary>
+    public static IEnumerable<T> InSheetReadingOrder<T>(
+        IEnumerable<T> items, Func<T, double> station, double pieceLengthIn) =>
+        items.OrderBy(item => StationToDrawingX(0, pieceLengthIn, station(item)));
+
+    /// <summary>
     /// Left edge of the piece within its view window. The piece is not centred: the approved
     /// sheet keeps <see cref="RightColumnReserve"/> clear on the right for the dimension
     /// column that reads down the side of the piece.

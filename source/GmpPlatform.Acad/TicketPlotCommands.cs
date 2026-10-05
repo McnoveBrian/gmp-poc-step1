@@ -102,6 +102,13 @@ public class TicketPlotCommands
     /// Keeps the layout's own device and paper where they resolve, and falls back to the PDF
     /// printer otherwise. The plot style the drawing asks for may not be installed here — the
     /// client's FINAL PRINT.ctb is theirs — so a missing one is reported, not fatal.
+    /// <para>
+    /// When device and paper are the layout's own, so are the plot area and scale: the sheet
+    /// plots exactly as the drafter's page setup does, at its true scale. Forcing extents and
+    /// scale-to-fit on every sheet shrank it by however far drawn objects overran the paper,
+    /// so the PDF no longer measured to scale. Fitting is kept only for a substituted device
+    /// or paper, where the layout's own scale may not fit the page.
+    /// </para>
     /// </summary>
     private static void ApplyDeviceAndMedia(PlotSettings settings, Layout layout, DrawLog log, string layoutName)
     {
@@ -113,7 +120,8 @@ public class TicketPlotCommands
 
             var device = layout.PlotConfigurationName;
             var devices = validator.GetPlotDeviceList().Cast<string>().ToList();
-            if (!devices.Contains(device))
+            var ownDevice = devices.Contains(device);
+            if (!ownDevice)
                 device = devices.FirstOrDefault(d => d.IndexOf("DWG To PDF", StringComparison.OrdinalIgnoreCase) >= 0)
                          ?? device;
 
@@ -121,9 +129,11 @@ public class TicketPlotCommands
             validator.RefreshLists(settings);
 
             var media = validator.GetCanonicalMediaNameList(settings).Cast<string>().ToList();
-            var wanted = media.FirstOrDefault(m => m == layout.CanonicalMediaName)
-                         ?? media.FirstOrDefault(m => m.IndexOf("17.00_x_11.00", StringComparison.OrdinalIgnoreCase) >= 0)
-                         ?? media.FirstOrDefault(m => m.IndexOf("ANSI_B", StringComparison.OrdinalIgnoreCase) >= 0);
+            var ownMedia = media.Contains(layout.CanonicalMediaName);
+            var wanted = ownMedia
+                ? layout.CanonicalMediaName
+                : media.FirstOrDefault(m => m.IndexOf("17.00_x_11.00", StringComparison.OrdinalIgnoreCase) >= 0)
+                  ?? media.FirstOrDefault(m => m.IndexOf("ANSI_B", StringComparison.OrdinalIgnoreCase) >= 0);
             if (wanted != null) validator.SetCanonicalMediaName(settings, wanted);
 
             var sheets = validator.GetPlotStyleSheetList().Cast<string>().ToList();
@@ -138,10 +148,24 @@ public class TicketPlotCommands
 
             if (style.Length > 0) validator.SetCurrentStyleSheet(settings, style);
 
-            validator.SetPlotType(settings, Autodesk.AutoCAD.DatabaseServices.PlotType.Extents);
-            validator.SetUseStandardScale(settings, true);
-            validator.SetStdScaleType(settings, StdScaleType.ScaleToFit);
-            validator.SetPlotCentered(settings, true);
+            var scale = layout.UseStandardScale
+                ? layout.StdScaleType.ToString()
+                : $"{layout.CustomPrintScale.Numerator:0.###}:{layout.CustomPrintScale.Denominator:0.###}";
+
+            if (ownDevice && ownMedia)
+            {
+                log.Info($"{layoutName}: page setup as drawn: {device}, {wanted}, {layout.PlotType}, scale {scale}");
+            }
+            else
+            {
+                validator.SetPlotType(settings, Autodesk.AutoCAD.DatabaseServices.PlotType.Extents);
+                validator.SetUseStandardScale(settings, true);
+                validator.SetStdScaleType(settings, StdScaleType.ScaleToFit);
+                validator.SetPlotCentered(settings, true);
+                log.Warn($"{layoutName}: page setup wants {layout.PlotConfigurationName} / {layout.CanonicalMediaName}, " +
+                         $"not available here; plotting extents fitted to {device} / {wanted ?? "its default paper"} " +
+                         "(not to scale).");
+            }
         }
         catch (System.Exception ex)
         {

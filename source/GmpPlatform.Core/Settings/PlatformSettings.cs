@@ -56,6 +56,18 @@ public sealed class PlatformSettings
     /// <summary>Plot the generated sheets to PDF after drawing.</summary>
     public bool PlotAfterDrawing { get; set; } = true;
 
+    /// <summary>
+    /// Seed layout that carries the TIF (top-in-form) view, e.g. "1 of 3". Left empty, sheet
+    /// roles follow the seed's tab order (see <c>SheetRoles</c>).
+    /// </summary>
+    public string? TifLayoutName { get; set; }
+
+    /// <summary>Seed layout that carries the BIF (bottom-in-form) view. Empty: tab order.</summary>
+    public string? BifLayoutName { get; set; }
+
+    /// <summary>Seed layout that carries the sections. Empty: tab order.</summary>
+    public string? SectionsLayoutName { get; set; }
+
     // ---- Ribbon ---------------------------------------------------------------
 
     /// <summary>

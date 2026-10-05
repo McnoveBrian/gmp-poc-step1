@@ -59,8 +59,8 @@ internal sealed class SectionDrawer
     public sealed record Cut(string Letter, TicketPart Part, PartInstance At, IReadOnlyList<string> With);
 
     /// <summary>
-    /// One section per distinct location that carries an embedded part, lettered in the order
-    /// they sit along the piece so the letters read left to right on the TIF view.
+    /// One section per distinct location that carries an embedded part, lettered so the
+    /// letters read left to right on the TIF view (<see cref="SheetConventions.InSheetReadingOrder{T}"/>).
     /// <para>
     /// Parts sharing a location are one section, not several. On AFIP-1035 the EMS016,
     /// EMS018 and EMS325 items sit exactly where each INS087 does — they are its assembly
@@ -89,12 +89,14 @@ internal sealed class SectionDrawer
                 var primary = ordered[0];
                 var with = ordered.Skip(1).Select(r => r.Part.PartNumber).ToList();
                 return (primary.Part, primary.At, With: (IReadOnlyList<string>)with);
-            })
-            .OrderBy(c => c.At.X)
+            });
+
+        var lettered = SheetConventions
+            .InSheetReadingOrder(groups, c => c.At.X, _ticket.Dimensions.LengthIn)
             .Take(available)
             .ToList();
 
-        return groups
+        return lettered
             .Select((c, i) => new Cut(Letter(i), c.Part, c.At, c.With))
             .ToList();
     }
@@ -130,26 +132,35 @@ internal sealed class SectionDrawer
     }
 
     /// <summary>
-    /// Section windows in reading order: rows top to bottom, then left to right.
+    /// Section windows in reading order as they appear <b>on the sheet</b>: rows top to
+    /// bottom, then left to right, by each viewport's position on paper.
     /// <para>
     /// Rows are found by overlap, not by rounding Y to a fixed grid. The approved sheet's
     /// section viewports in one row differ in height and centre by several inches, and a
     /// fixed grid split a row in two, so the letters came out A, B, D on top and C below.
+    /// Ordering by the model-space area each viewport looks at gave the same symptom: the
+    /// seed's viewports are not arranged in model space the way they sit on the sheet.
     /// </para>
     /// </summary>
     private static List<ViewWindow> ReadingOrder(IReadOnlyList<ViewWindow> windows)
     {
+        var onPaper = windows.All(w => w.PaperHeight > 0);
+        double Cx(ViewWindow w) => onPaper ? w.PaperCenterX : w.CenterX;
+        double Cy(ViewWindow w) => onPaper ? w.PaperCenterY : w.CenterY;
+        double HalfHeight(ViewWindow w) => (onPaper ? w.PaperHeight : w.Height) / 2.0;
+
         var rows = new List<List<ViewWindow>>();
-        foreach (var w in windows.OrderByDescending(w => w.CenterY))
+        foreach (var w in windows.OrderByDescending(Cy))
         {
             // Same row when this window's centre falls inside the vertical span of the
             // first window already placed in that row.
-            var row = rows.FirstOrDefault(r => w.CenterY >= r[0].MinY && w.CenterY <= r[0].MaxY);
+            var row = rows.FirstOrDefault(r =>
+                Math.Abs(Cy(w) - Cy(r[0])) <= HalfHeight(r[0]));
             if (row == null) rows.Add(row = new List<ViewWindow>());
             row.Add(w);
         }
 
-        return rows.SelectMany(r => r.OrderBy(w => w.CenterX)).ToList();
+        return rows.SelectMany(r => r.OrderBy(Cx)).ToList();
     }
 
     private void DrawSection(ViewWindow window, Cut cut)
@@ -275,6 +286,8 @@ internal sealed class SectionDrawer
     /// Places the client's section marker on the TIF view at each cut, carrying the same
     /// letter as the section it points to — the link that makes a section readable.
     /// </summary>
+    /// <param name="tifOrigin">The origin the TIF piece was drawn from, so markers land on
+    /// the parts they cut.</param>
     public int DrawCutMarkers(Point3d tifOrigin, IReadOnlyList<Cut> cuts)
     {
         var bt = (BlockTable)_tr.GetObject(_db.BlockTableId, OpenMode.ForRead);
@@ -292,7 +305,7 @@ internal sealed class SectionDrawer
         {
             // Marker sits just outside the top edge of the piece, over the cut.
             var at = new Point3d(
-                tifOrigin.X + cut.At.X,
+                SheetConventions.StationToDrawingX(tifOrigin.X, _ticket.Dimensions.LengthIn, cut.At.X),
                 tifOrigin.Y + _ticket.Dimensions.HeightIn + 4.0,
                 0);
 

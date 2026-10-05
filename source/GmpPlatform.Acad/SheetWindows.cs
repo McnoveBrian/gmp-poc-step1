@@ -6,7 +6,8 @@ namespace GmpPlatform.Acad;
 /// <summary>The model-space rectangle a paper-space viewport shows.</summary>
 internal readonly record struct ViewWindow(
     double CenterX, double CenterY, double Width, double Height, double Scale,
-    ObjectId ViewportId = default, double PaperWidth = 0, double PaperHeight = 0)
+    ObjectId ViewportId = default, double PaperWidth = 0, double PaperHeight = 0,
+    double PaperCenterX = 0, double PaperCenterY = 0)
 {
     /// <summary>Model-space scale factor, e.g. 64 for 3/16" = 1'-0". 0 when unknown.</summary>
     public double AnnotationScale => Scale > 0 ? Math.Round(1.0 / Scale) : 0;
@@ -20,7 +21,7 @@ internal readonly record struct ViewWindow(
         p.X >= MinX && p.X <= MaxX && p.Y >= MinY && p.Y <= MaxY;
 }
 
-internal sealed record SheetWindow(string Layout, int Viewports, ViewWindow? Main, IReadOnlyList<ViewWindow> All);
+internal sealed record SheetWindow(string Layout, int Viewports, ViewWindow? Main, IReadOnlyList<ViewWindow> All, int TabOrder = 0);
 
 /// <summary>
 /// Finds what each layout's viewports look at, so generated content can be drawn into the
@@ -56,7 +57,8 @@ internal static class SheetWindows
                 // The stored view centre is relative to the view target.
                 var cx = vp.ViewCenter.X + vp.ViewTarget.X;
                 var cy = vp.ViewCenter.Y + vp.ViewTarget.Y;
-                windows.Add(new ViewWindow(cx, cy, width, height, vp.CustomScale, vp.ObjectId, vp.Width, vp.Height));
+                windows.Add(new ViewWindow(cx, cy, width, height, vp.CustomScale, vp.ObjectId, vp.Width, vp.Height,
+                    vp.CenterPoint.X, vp.CenterPoint.Y));
             }
 
             // The main drawing view is the largest window on the sheet.
@@ -64,11 +66,12 @@ internal static class SheetWindows
                 ? null
                 : windows.OrderByDescending(w => w.Width * w.Height).First();
 
-            results.Add(new SheetWindow(layout.LayoutName, windows.Count, main, windows));
+            results.Add(new SheetWindow(layout.LayoutName, windows.Count, main, windows, layout.TabOrder));
         }
 
+        // Tab order is the sheet order the drafter sees (SheetRoles).
         return results
-            .OrderBy(r => r.Layout, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(r => r.TabOrder)
             .ToList();
     }
 }

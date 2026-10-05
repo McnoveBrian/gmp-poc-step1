@@ -39,6 +39,12 @@ internal sealed class TicketDrawer
     private int _stationCallouts;
 
     /// <summary>
+    /// Where the TIF piece was actually drawn: after the window was fitted to the piece and the
+    /// piece shifted off-centre. The section cut markers must use this, not a recomputation.
+    /// </summary>
+    private Point3d? _tifOrigin;
+
+    /// <summary>
     /// Stations that already carry a callout in the current view, and how many.
     /// <para>
     /// All callouts share one band against the piece, so two parts at the same station would
@@ -92,24 +98,33 @@ internal sealed class TicketDrawer
         var windows = SheetWindows.Discover(_db, _tr);
         _log.Info($"layouts: {string.Join(", ", windows.Select(w => $"{w.Layout} ({w.Viewports} vp)"))}");
 
-        // Sheet roles follow the layout order the client uses: "1 of 3" is the top-in-form
-        // view, "2 of 3" the bottom-in-form finish layout, "3 of 3" the sections.
-        // This used to be inferred from whether a window could hold the piece, which broke
-        // as soon as viewports were rescaled to fit - and silently drew nothing for any
-        // piece larger than the seed's layout.
-        var candidates = windows.Where(w => w.Main != null).Take(2).ToList();
+        // Sheet roles: layout names from settings, otherwise the seed's tab order - on the
+        // approved ticket "1 of 3" is the top-in-form view, "2 of 3" the bottom-in-form finish
+        // layout, "3 of 3" the sections. Roles used to be inferred from whether a window could
+        // hold the piece, which broke as soon as viewports were rescaled to fit - and silently
+        // drew nothing for any piece larger than the seed's layout.
+        var settings = GmpPlatform.Core.Settings.SettingsStore.Load();
+        var roles = SheetRoles.Assign(
+            windows.Select(w => new SheetCandidate(w.Layout, w.TabOrder, w.Main != null, w.All.Count)),
+            settings.TifLayoutName, settings.BifLayoutName, settings.SectionsLayoutName);
+        foreach (var warning in roles.Warnings) _log.Warn(warning);
 
-        if (candidates.Count == 0)
+        SheetWindow? Role(string? layout) => windows.FirstOrDefault(w => w.Layout == layout);
+        var tif = Role(roles.Tif);
+        var bif = Role(roles.Bif);
+        var sections = Role(roles.Sections);
+        _log.Info($"sheet roles: TIF={roles.Tif ?? "-"}, BIF={roles.Bif ?? "-"}, sections={roles.Sections ?? "-"}");
+
+        if (tif == null)
         {
             _log.Warn("No layout with a drawing viewport; nothing was drawn.");
             return;
         }
 
-        var faces = new[] { "TIF", "BIF" };
-        for (var i = 0; i < candidates.Count && i < faces.Length; i++)
-            DrawPieceView(candidates[i], faces[i], drawNotes: i == 0);
+        DrawPieceView(tif, "TIF", drawNotes: true);
+        if (bif != null) DrawPieceView(bif, "BIF", drawNotes: false);
 
-        DrawSectionsSheet(windows, candidates);
+        DrawSectionsSheet(sections);
 
         var title = FillTitleBlocks();
         var bom = FillBillOfMaterial();
@@ -146,6 +161,7 @@ internal sealed class TicketDrawer
             0);
 
         var annotationScale = window.AnnotationScale > 0 ? window.AnnotationScale : 64.0;
+        if (face.Equals("TIF", StringComparison.OrdinalIgnoreCase)) _tifOrigin = origin;
 
         _log.Info($"--- {sheet.Layout}: {face} view, window centre ({window.CenterX:N1}, " +
                   $"{window.CenterY:N1}) size {window.Width:N0} x {window.Height:N0}, " +
@@ -540,11 +556,10 @@ internal sealed class TicketDrawer
 
     /// <summary>
     /// Sheet 3: sections through the piece, plus the cut markers on the TIF view that point
-    /// at them. The section sheet is the layout that is not a piece view but has windows.
+    /// at them.
     /// </summary>
-    private void DrawSectionsSheet(IReadOnlyList<SheetWindow> windows, IReadOnlyList<SheetWindow> pieceViews)
+    private void DrawSectionsSheet(SheetWindow? sectionSheet)
     {
-        var sectionSheet = windows.FirstOrDefault(w => !pieceViews.Contains(w) && w.All.Count > 0);
         if (sectionSheet == null)
         {
             _log.Warn("No section sheet found; sections were not drawn.");
@@ -562,17 +577,14 @@ internal sealed class TicketDrawer
 
         var drawn = drawer.DrawSections(sectionSheet, cuts, ClearWindow);
 
-        // Markers go on the TIF view, at the same origin the piece was drawn from.
-        var tif = pieceViews.FirstOrDefault()?.Main;
+        // Markers go on the TIF view, at the origin the piece was drawn from. Recomputing it
+        // from the seed's window put them off the piece: the window is refitted to the piece
+        // and the piece sits left of centre (SheetConventions.PieceOriginX).
         var markers = 0;
-        if (tif is { } w)
-        {
-            var origin = new Point3d(
-                w.CenterX - _ticket.Dimensions.LengthIn / 2.0,
-                w.CenterY - _ticket.Dimensions.HeightIn / 2.0,
-                0);
-            markers = drawer.DrawCutMarkers(origin, cuts);
-        }
+        if (_tifOrigin is { } tifOrigin)
+            markers = drawer.DrawCutMarkers(tifOrigin, cuts);
+        else
+            _log.Warn("The TIF view was not drawn; section cuts were not marked.");
 
         _log.Info($"    drew {drawn} section(s), placed {markers} cut marker(s)");
     }

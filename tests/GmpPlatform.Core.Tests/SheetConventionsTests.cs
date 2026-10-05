@@ -57,6 +57,23 @@ public class SheetConventionsTests
         Assert.Equal(141.0, xs[3] - xs[2], 6);
     }
 
+    /// <summary>
+    /// Section letters read left to right across the TIF view. Ordering by station did the
+    /// opposite once stations ran right to left: "A" landed at the right-hand end, against the
+    /// reading direction of everything else on the sheet.
+    /// </summary>
+    [Fact]
+    public void Sheet_reading_order_runs_left_to_right()
+    {
+        double[] stations = { 30, 498, 171, 342 };
+        var ordered = SheetConventions.InSheetReadingOrder(stations, s => s, PieceLength).ToArray();
+
+        Assert.Equal(new double[] { 498, 342, 171, 30 }, ordered);
+
+        var xs = ordered.Select(s => SheetConventions.StationToDrawingX(0, PieceLength, s)).ToArray();
+        Assert.Equal(xs.OrderBy(x => x), xs);
+    }
+
     [Fact]
     public void Piece_is_not_centred_in_its_window()
     {
