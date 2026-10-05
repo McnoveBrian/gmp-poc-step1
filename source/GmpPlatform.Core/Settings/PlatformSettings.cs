@@ -38,7 +38,10 @@ public sealed class PlatformSettings
     /// </summary>
     public string? SeedDwgPath { get; set; }
 
-    /// <summary>accoreconsole.exe. Left empty, the newest installed AutoCAD is found.</summary>
+    /// <summary>
+    /// accoreconsole.exe. Left empty, an installed AutoCAD the drawing engine supports is found
+    /// (see <c>AcadRunner.SupportedReleases</c>).
+    /// </summary>
     public string? AutoCadConsolePath { get; set; }
 
     /// <summary>

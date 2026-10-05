@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace GmpPlatform.Core.Interop;
 
@@ -30,44 +31,85 @@ public sealed class AcadRunResult
 /// </summary>
 public static class AcadRunner
 {
-    /// <summary>The AutoCAD release the drawing engine is compiled against.</summary>
-    public const string TargetRelease = "2025";
-
     /// <summary>
-    /// Finds accoreconsole.exe, preferring the release the drawing engine was built for.
+    /// AutoCAD releases the drawing engine runs in, most preferred first. The first is the
+    /// release it is compiled against.
     /// <para>
-    /// Version matters: the engine links AutoCAD 2025's managed API, and picking simply the
-    /// newest install sent it to AutoCAD 2027, where the run stopped part-way through without
-    /// saving. A newer release is used only when the matching one is absent, and the caller
-    /// is told, because that combination is not supported.
+    /// AutoCAD keeps its managed API binary-compatible within a release family, so one engine
+    /// build serves the whole family: 2025 and 2026 are both R25. 2027 starts the R26 family on
+    /// .NET 10 and needs an engine built for it; running this build there stopped part-way
+    /// through without saving. Adding the next family means a second engine build and its
+    /// releases here, not changes to the Revit side.
     /// </para>
     /// </summary>
-    public static string? FindConsole(string? configured = null, string? preferRelease = TargetRelease)
+    public static readonly IReadOnlyList<string> SupportedReleases = new[] { "2025", "2026" };
+
+    /// <summary>
+    /// Finds accoreconsole.exe: the configured path when it exists, otherwise the most
+    /// preferred supported release that is installed, otherwise the newest install (which
+    /// <see cref="Run"/> then reports as unsupported).
+    /// </summary>
+    public static string? FindConsole(string? configured = null)
     {
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
+        return ChooseConsole(InstalledConsoles());
+    }
 
-        var candidates = new List<string>();
+    /// <summary>Every accoreconsole.exe under an <c>Autodesk\AutoCAD *</c> folder.</summary>
+    public static IReadOnlyList<string> InstalledConsoles()
+    {
+        var found = new List<string>();
         foreach (var root in new[]
                  {
                      Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                      Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
                  })
         {
+            if (string.IsNullOrEmpty(root)) continue;
             var autodesk = Path.Combine(root, "Autodesk");
             if (!Directory.Exists(autodesk)) continue;
 
-            candidates.AddRange(Directory.GetDirectories(autodesk, "AutoCAD *")
+            found.AddRange(Directory.GetDirectories(autodesk, "AutoCAD *")
                 .Select(d => Path.Combine(d, "accoreconsole.exe"))
                 .Where(File.Exists));
         }
+        return found;
+    }
 
-        if (candidates.Count == 0) return null;
+    /// <summary>
+    /// Picks the console to use from those found: the first entry of
+    /// <see cref="SupportedReleases"/> that is present, else the newest release found.
+    /// </summary>
+    public static string? ChooseConsole(IEnumerable<string> candidates)
+    {
+        var list = candidates.ToList();
+        if (list.Count == 0) return null;
 
-        var matching = candidates.FirstOrDefault(p =>
-            !string.IsNullOrWhiteSpace(preferRelease) &&
-            p.IndexOf(preferRelease!, StringComparison.OrdinalIgnoreCase) >= 0);
+        foreach (var release in SupportedReleases)
+        {
+            var match = list.FirstOrDefault(p => ReleaseOf(p) == release);
+            if (match != null) return match;
+        }
 
-        return matching ?? candidates.OrderByDescending(p => p).First();
+        return list.OrderByDescending(p => ReleaseOf(p) ?? "", StringComparer.Ordinal).First();
+    }
+
+    /// <summary>
+    /// The AutoCAD release year of a console, read from its folder name
+    /// (<c>...\AutoCAD 2025\accoreconsole.exe</c> gives "2025"); null when the folder does not say.
+    /// </summary>
+    public static string? ReleaseOf(string consolePath)
+    {
+        var folder = Path.GetFileName(Path.GetDirectoryName(consolePath) ?? "");
+        var match = Regex.Match(folder, @"(?<!\d)(20\d\d)(?!\d)");
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>Whether the console belongs to a release the drawing engine supports.</summary>
+    public static bool IsSupported(string consolePath)
+    {
+        var release = ReleaseOf(consolePath);
+        return release != null && SupportedReleases.Contains(release);
     }
 
     /// <summary>
@@ -97,10 +139,11 @@ public static class AcadRunner
             return Fail(result, "AutoCAD's headless console (accoreconsole.exe) was not found. " +
                                 "Set AutoCadConsolePath in settings.");
 
-        if (console.IndexOf(TargetRelease, StringComparison.OrdinalIgnoreCase) < 0)
+        if (!IsSupported(console))
             result.Warnings.Add(
                 $"Running on {Path.GetFileName(Path.GetDirectoryName(console))}, but the drawing engine " +
-                $"is built for AutoCAD {TargetRelease}. Install {TargetRelease} or set AutoCadConsolePath.");
+                $"supports AutoCAD {string.Join(" and ", SupportedReleases)}. Install one of those " +
+                "or point AutoCadConsolePath at one.");
 
         foreach (var (path, what) in new[] { (ticketJson, "piece ticket"), (seedDwg, "seed drawing"), (pluginDll, "drawing engine") })
             if (!File.Exists(path))
@@ -126,7 +169,11 @@ public static class AcadRunner
         script.AppendLine("GMPTICKET");
         script.AppendLine("_QSAVE");   // the drawing being written is the one that is open
         if (plot) script.AppendLine("GMPTICKETPLOT");
-        script.AppendLine("QUIT");
+        // Plotting switches layouts, which marks the saved drawing modified again. A plain QUIT
+        // then waits on an unseen "discard all changes?" prompt until the timeout kills the
+        // console, freezing Revit for minutes. Those changes are not part of the ticket, so
+        // they are discarded; the drawing was already saved above.
+        script.AppendLine("(if (> (getvar \"DBMOD\") 0) (command \"_.QUIT\" \"_Y\") (command \"_.QUIT\"))");
         File.WriteAllText(result.ScriptPath, script.ToString());
 
         var info = new ProcessStartInfo
@@ -154,8 +201,8 @@ public static class AcadRunner
             using var process = Process.Start(info);
             if (process == null) return Fail(result, "AutoCAD's console could not be started.");
 
-            // The console does not always exit on QUIT; the work is done and saved by then,
-            // so a timeout here is not a failure on its own.
+            // A safety net: should the console still not exit, the work is done and saved by
+            // the time it reaches QUIT, so a timeout here is not a failure on its own.
             if (!process.WaitForExit(timeoutSeconds * 1000))
             {
                 try { process.Kill(); } catch { /* best effort */ }
