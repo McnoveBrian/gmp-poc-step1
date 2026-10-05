@@ -49,6 +49,9 @@ samples/
 *.3dm
 *.skp
 
+## Install packages built by tools/Package.ps1
+dist/
+
 ## Meeting media and speech-to-text models (large; regenerate locally)
 *.mp3
 *.wav
