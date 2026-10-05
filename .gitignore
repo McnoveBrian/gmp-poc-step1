@@ -49,6 +49,12 @@ samples/
 *.3dm
 *.skp
 
+## Meeting media and speech-to-text models (large; regenerate locally)
+*.mp3
+*.wav
+*.m4a
+references/**/models/
+
 ## Revit local / backup junk
 *.000?.rvt
 *.00??.rvt

@@ -1,0 +1,527 @@
+1
+00:00:02,770 --> 00:00:18,769
+Okay, so we, we look at that. I look on your video also. Thank you, that was very nice.
+
+2
+00:00:18,769 --> 00:01:00,539
+Oh, Marcin is with us. Hi Marcin. Hi. So Brian, I would have question because that's what you sent us. It's, I would say very basic for now.
+
+3
+00:01:00,539 --> 00:01:15,540
+I understand that it was a short time, right? And I'm just wondering if this, we could achieve, you know, the style exactly the same as, you know, I showed you.
+
+4
+00:01:15,540 --> 00:01:29,909
+This is very important because for now the dimension lines look different than the, you know, the text look different.
+
+5
+00:01:29,909 --> 00:01:45,909
+I'm just, you know, because I'm not that computer savvy, so I'm not sure. However, when I was doing this by myself, I was able to achieve the same style for the dimensions, the same style for the text.
+
+6
+00:01:45,909 --> 00:02:01,909
+I can open up this in the second and I show you. And this would be the, you know, the most important question because in general, we know that it's achievable, I mean, to create this tool.
+
+7
+00:02:01,909 --> 00:02:17,909
+The question is, you know, if this can be exactly as I showed you this example, or it's going to be different, it's going to look different, you know what I mean?
+
+8
+00:02:17,909 --> 00:02:41,909
+I don't know if Marcin you can describe it somehow, maybe what we mean by this, but that's, because our client is very picky, so it's not only that the information that we have needs to be correct, they need to be correct, but it needs to look like this ticket that I gave you, basically, the style.
+
+9
+00:02:41,909 --> 00:02:47,819
+Does this make sense?
+
+10
+00:02:47,819 --> 00:02:55,819
+Yeah, totally makes sense. So let me explain.
+
+11
+00:02:55,819 --> 00:03:01,819
+So I think that is really the key point, I think.
+
+12
+00:03:01,819 --> 00:03:18,819
+So the goal is not to give you a different looking automatic ticket. So the goal is to reproduce the Tinder ticket standard as closely as possible.
+
+13
+00:03:18,819 --> 00:03:31,819
+So that is actually why I choose to generate the final drawing natively in AutoCAD instead of simply exporting rabbit sheets.
+
+14
+00:03:31,819 --> 00:03:57,819
+So I think from now, the POC version, that it starts from a copy of your approved DWS file, so we are using the actual type blocks and layers and dimension styles and layouts and existing blocks,
+
+15
+00:03:57,819 --> 00:04:07,819
+rather than creating something that only looks similar. So I think these are still differences today.
+
+16
+00:04:07,819 --> 00:04:32,819
+For example, I don't have the Tinder's original, you know, SHX fonts or, you know, final print of, you know, CTV file and also some, you know, details and conditions, specific sections still need to be built.
+
+17
+00:04:33,819 --> 00:04:45,819
+But I think regarding the style, technically, I believe we can get very close to the exact style.
+
+18
+00:04:45,819 --> 00:05:01,819
+You shoot me and I treat the visual standard as the acceptance requirement, not just a preference. Yeah, I'm sure we can do this, I think.
+
+19
+00:05:01,819 --> 00:05:11,360
+Okay, I'm going to share my screen. And this is the example of what I achieved.
+
+20
+00:05:11,360 --> 00:05:28,360
+And I stopped, it was like two months ago, probably, and I didn't have time. So this is exactly the same, the style for the dimensions for the text,
+
+21
+00:05:29,360 --> 00:05:44,360
+for the top view side view. It sucks up the, you know, the elements and mark it up the same, I mean, hatchet the same way as we have it on our drawings.
+
+22
+00:05:45,360 --> 00:06:07,360
+Here is the second view, like a bottom form view, also with the already with dimension generated, some running dimensions and other plates that are in the bottom surface of the wall, plus the table generated, you know, based on this.
+
+23
+00:06:08,360 --> 00:06:21,360
+And so I think it's, it's probably achievable. I, as I said, we don't have enough time to play with this. And
+
+24
+00:06:22,360 --> 00:06:37,360
+what about the timeframe and cost of this? Let's say for each model, for example, for the walls only, like those, how do you assume or if it would be
+
+25
+00:06:37,360 --> 00:06:52,360
+how much time it would take you to, to prepare something, there's, there's no such a big, you know, rush or something, but estimate, estimate time.
+
+26
+00:06:53,360 --> 00:06:59,360
+That would look similar to the final ticket. Right.
+
+27
+00:07:00,360 --> 00:07:05,360
+What do you think? Like a week, two weeks, month, half a year, a year?
+
+28
+00:07:05,360 --> 00:07:44,850
+Let me think. So this is a POS version, it's just for wall, wall elements. So I think I'm not half a year or year for the wall panel piece. So based on what I've, what I've learned from the model and this POS version,
+
+29
+00:07:46,850 --> 00:08:08,850
+I would estimate around three or six weeks to get the wall workflow to a solid production ready first version. So I don't want to say one or two weeks because the last part is actually the typical part.
+
+30
+00:08:08,850 --> 00:08:24,850
+So, I mean the condition specific sections and, you know, finished details and reinforcement rules and, you know, bomb rules and getting the graphics are very close to client standard.
+
+31
+00:08:24,850 --> 00:08:35,850
+And those are the main gaps in the POS today. So I'd probably structure it in milestones. First is,
+
+32
+00:08:35,850 --> 00:08:54,850
+finish one reference wall, like the sample you just shared properly, and then test different for conditions like openings and, you know, cobbles and pockets and, you know, different embeds.
+
+33
+00:08:54,850 --> 00:09:13,850
+And finally, having it put several real panels. So I think if you need to complete this, you know, deliverable as soon as possible.
+
+34
+00:09:13,850 --> 00:09:33,850
+I can, you know, do overall and also including weekend. So I think I can develop this, you know, project as soon as possible.
+
+35
+00:09:33,850 --> 00:09:41,850
+As quickly as possible, I think on my side. So, yeah.
+
+36
+00:09:42,850 --> 00:10:07,450
+I have a question when you mentioned about the rebar rule. By this, you mean that the rebar would need to be modeled in the main model or that would be some sort of the rule that
+
+37
+00:10:07,450 --> 00:10:31,259
+would be applied only on the ticket and as a, let's say, I don't know, 2D graphics, for example. The reason why I'm asking is because if I know that I'm going deep, too deep into the details.
+
+38
+00:10:31,259 --> 00:10:58,259
+But I think it's important, too, when you're talking about that rebar rule, and if those rebars would need to be developed inside that 3D model and modeled them as a 3D shape
+
+39
+00:10:58,259 --> 00:11:26,259
+that will significantly, how to say, overwhelm the model itself, meaning it will grow with weight. This means that it may be heavier to work with, to start editing, etc, etc.
+
+40
+00:11:26,259 --> 00:11:44,259
+So when you mentioned about the rebar rule, you meant that all the rebars, the regular bars, strands, etc, would need to be, or meshes, rebar meshes would need to be physically placed in the model.
+
+41
+00:11:44,259 --> 00:12:02,259
+Or you meant something, that rebar rule, whatever that is, but when the ticket will be done by itself, that rebar rule will, I don't know, layout.
+
+42
+00:12:02,259 --> 00:12:29,240
+For example, here, what we see on the screen, you have that rebar rule that you click and that rebar rule will place the rebar independently from the main model on that ticket.
+
+43
+00:12:29,240 --> 00:12:49,120
+So Marcin's question, basically, is if, for example, here in AutoCAD, we put the line that shows the rebar, right?
+
+44
+00:12:49,120 --> 00:13:11,120
+On the ticket. The question is, if this needs to be already on the model, or we can put some kind of parameters and, you know, that we can, that program would recognize, okay, there is an opening, I could put, you know, rebars around or something like that.
+
+45
+00:13:11,120 --> 00:13:16,120
+That's the in AutoCAD, already not in the model.
+
+46
+00:13:16,120 --> 00:13:22,820
+Or what, what did you mean by rebar rule?
+
+47
+00:13:22,820 --> 00:13:46,820
+Oh, yeah. So let me, let me explain. So as the second option, I mean, I don't mean that we need to model every bar and, you know, strand and mesh physically in the main rabbit model.
+
+48
+00:13:46,820 --> 00:14:03,820
+So actually, I'd prefer not to do that for exactly the reason you mentioned, it can make the production model unnecessarily heavy and more difficult for your team to work with.
+
+49
+00:14:03,820 --> 00:14:24,820
+So, in the current POC, the wall reinforcement is not modeled in rabbit. The automation, you know, reach the panel geometry and parameters, and then the rebar rule determines what reinforcement should appear on the shop ticket.
+
+50
+00:14:24,820 --> 00:14:39,820
+So for example, it can calculate bar size and length and quantity and lap and spacing and location and then throw that reinforcement directly in AutoCAD as ticket graphics.
+
+51
+00:14:39,820 --> 00:14:53,820
+So the rabbit stays, you know, relatively clean. So the ticket generation engine applies and the reinforcement rules independently when the ticket is created.
+
+52
+00:14:53,820 --> 00:15:09,820
+So what I need from you is the engineering logic for this wall condition. Wood bars and mesh and strands and trim bars and spacing and cover and, you know, opening reinforcement, etc.
+
+53
+00:15:09,820 --> 00:15:24,820
+So it should be shown once we define these rules, the software can generate them automatically without physically adding all the reinforcement to the rabbit model.
+
+54
+00:15:24,820 --> 00:15:51,820
+So it doesn't need to already exist as rebar in the rabbit model. So, for example, if rabbit gives us the actual wall outline and the opening geometry, the program can recognize like, okay, there is an opening here, then our rebar rule engine can say that
+
+55
+00:15:51,820 --> 00:16:04,820
+wood reinforcement is required around the opening, like, you know, bar size and offset from the opening and extension length and quantity and lap and so on.
+
+56
+00:16:04,820 --> 00:16:25,820
+And then those bars can be drawn directly on the AutoCAD shop ticket as 2D fabrication graphics. So we don't need to create those bars as physical authority in a rapid elements. I think that is actually how I'd prefer to build this.
+
+57
+00:16:26,820 --> 00:16:44,820
+The important thing I need from you and your engineering team is the rule itself. So, for example, for this type and size of a print, put these bars at these locations for a different condition using another rule.
+
+58
+00:16:44,820 --> 00:17:02,820
+So, a rabbit gives us the geometric parameters and the ticket engine applies your engineering reinforcement rules. So that keeps the rabbit model much lighter while, you know, still, you know, producing the detailed shop ticket you need.
+
+59
+00:17:02,820 --> 00:17:29,609
+And this feature is optional, right? Because we can do this or we can abandon this and do the reinforcement by hand, right? You know what I mean? That we can achieve basically something like I'm showing here and put the reinforcement by drafters by hand.
+
+60
+00:17:29,609 --> 00:17:51,609
+I think what Greg is saying, I mean, in which direction he's leaning to is that that rebar tool or that rebar rule would be good to have. However, the first step would be to have everything without the rebar because it looks like that would be the fastest way.
+
+61
+00:17:51,609 --> 00:18:05,609
+And all those engineering stuff like what is the size of the bar, the cover, the clearance, the band, the appropriate radius of the band, etc., etc., etc.
+
+62
+00:18:05,609 --> 00:18:23,609
+This is a lot of information that there's no point that it would be no point for now holding that tool to export all those elements and be ready for the drafters to drop in some rebars and move.
+
+63
+00:18:23,609 --> 00:18:47,240
+And that rebar ruler or how did you call it? That thing with the rebars we could do in the later stage. That would be possible, right? This is what you meant, right?
+
+64
+00:18:47,240 --> 00:18:59,240
+Exactly, because I'm wondering if this would be even possible to cover all the cases that we have. Sometimes it's so many different cases, so many different rules.
+
+65
+00:18:59,240 --> 00:19:13,240
+I was thinking about Meantime, Greg, and I think it couldn't be fixed. Let's say...
+
+66
+00:19:13,240 --> 00:19:19,240
+I know what you want to say. It's not going to recognize automatically. It would have to be like a window.
+
+67
+00:19:19,240 --> 00:19:31,240
+Yeah, and you are including your data, what you want to have. For example, I want to have for this one specifically, I want to have clearance, for example, three inches, right? But somewhere, three quarters.
+
+68
+00:19:31,240 --> 00:19:40,240
+On the end of the day, putting this information for each ticket, it may take more time than it was copied over and over and do it by hand.
+
+69
+00:19:40,240 --> 00:19:59,240
+That's why I'm asking if we can first start with the version that we have all the place, everything, everything, except the reinforcement, because that could be a pretty complex and pretty big step.
+
+70
+00:20:00,240 --> 00:20:17,240
+Which doesn't mean it cannot be done, because we've already seen that. It's possible. We've seen Revit models with implementing all the rebars in 3D into the beam and walls and everything.
+
+71
+00:20:17,240 --> 00:20:22,240
+And just from our perspective, for now...
+
+72
+00:20:22,240 --> 00:20:40,490
+For us, even the module that would do something similar, like you can see on my screen, without reinforcement, it would be already pretty satisfactory for us. It would be good enough.
+
+73
+00:20:40,490 --> 00:20:55,490
+So I have another question, though, because you have these details here, right? And on the page number three that are shown here, are they live sections or they are just like, you know, dead?
+
+74
+00:20:55,490 --> 00:21:11,500
+Meaning, if something changes on section A, let's say, if something changes on the ticket itself, is it going to automatically change on these details?
+
+75
+00:21:11,500 --> 00:21:12,500
+Yeah, of course.
+
+76
+00:21:12,500 --> 00:21:19,140
+I'm sorry, say again?
+
+77
+00:21:19,140 --> 00:21:25,140
+Yeah, it can be changed automatically.
+
+78
+00:21:25,140 --> 00:21:48,259
+Yeah, so, yeah, let me explain. So, just a sec.
+
+79
+00:21:48,259 --> 00:22:12,259
+So, the first, I think, I can understand what you are saying right now. So, first time, I completely agree on the reinforcement. So we can make that a later phase.
+
+80
+00:22:12,259 --> 00:22:32,259
+So, for the first production version, we can regenerate the wall geometry and openings and embeds and dimensions and sections and form and details and the correct ticket presentation and your drafter as the reinforcement manually.
+
+81
+00:22:32,259 --> 00:22:39,259
+So, that will reduce the complexity and get you useful automation much faster.
+
+82
+00:22:39,259 --> 00:23:03,259
+So, for your section question, in this current POC, you know, these are not, you know, live rapid sections. So, they are generated programmatically in AutoCAD from the information extracted from rapid.
+
+83
+00:23:03,259 --> 00:23:16,259
+But they are also not just static copied details. So, when you generate the ticket again, the program reads the current panel data and regenerates the sections.
+
+84
+00:23:16,259 --> 00:23:31,259
+So, for example, if the panel sequence changes from 9 inches to 10 inches and that information is in rapid, the regenerated section can reflect the automatically.
+
+85
+00:23:31,259 --> 00:23:49,259
+So, for complex conditions, like, you know, pockets, openings, you know, installation changes, we still need to build the condition specific section logic. That is one of the remaining pieces.
+
+86
+00:23:49,259 --> 00:23:52,259
+Okay.
+
+87
+00:23:52,259 --> 00:24:09,259
+Fran, what about, because we know it's going to take a few weeks, what about pricing? For example, the version first the step without the reinforcement and version, let's say with reinforcement.
+
+88
+00:24:09,259 --> 00:24:19,490
+How would you think how much it may cost?
+
+89
+00:24:19,490 --> 00:24:23,490
+Hey, Greg, may I have a question?
+
+90
+00:24:23,490 --> 00:24:24,490
+Sure, go ahead.
+
+91
+00:24:24,490 --> 00:24:36,490
+Oh, yeah. So, what is the more important thing on your side, between the timeframe and budget?
+
+92
+00:24:36,490 --> 00:24:53,470
+You know, the budget is a little bit more important because it's not that cheap, right? Time is not that bad, you know, a few days, weeks, either side, either way, it's okay.
+
+93
+00:24:53,470 --> 00:25:07,950
+So, could you share with me your target timeframe?
+
+94
+00:25:07,950 --> 00:25:13,390
+I think that would you propose it's completely acceptable.
+
+95
+00:25:13,390 --> 00:25:42,390
+Okay. So, based on what I've seen now, I would separate it into two stages. So, the first version without reinforcement automation, I think we can complete about two or three weeks.
+
+96
+00:25:42,390 --> 00:26:08,390
+I think so that focus and getting the wall tickets much closer and to production and panel geometry and openings and embeds and, you know, dimensions and condition specific sections and shit, two details and, you know, bomb and tight blocks and matching the tindle drafting standard.
+
+97
+00:26:08,390 --> 00:26:31,390
+So, I think, if, of course, as I mentioned before, I can, you know, do overwork, including the weekend, so I can, you know, finish the development as soon as possible.
+
+98
+00:26:31,390 --> 00:26:52,390
+So, I think, but depending on how many different work conditions we need to support. So, yeah, this is dependent on, you know, this kind of wall types, what conditions we need to support.
+
+99
+00:26:53,390 --> 00:27:16,390
+Yes, but that two, three weeks, you would be for the first, let's say, the first stage of the many other elements and stages for this two, three weeks to complete that phase, how much you think it would cost.
+
+100
+00:27:16,390 --> 00:27:48,579
+Oh, yeah. So, let me think. So, my hourly rate is 25 to, you know, $35 per hour. So, based on my, you know, hourly rate, I think I'm the first version without reinforcement automation.
+
+101
+00:27:48,579 --> 00:28:18,380
+It can, you know, estimate roughly about, you know, 3k or 2, 5k, I think the first version and also the next, the separate phase, I mean, the reinforcement automation phase.
+
+102
+00:28:21,380 --> 00:28:43,380
+This interface, depending on the complexity, I'd roughly estimate about one or two weeks. So, the acoustic is about, you know, 1.5 to 3k, I think.
+
+103
+00:28:44,380 --> 00:28:58,380
+But I think, you know, this budget, I mean, I'm really flexible. So, all the, you know, budget and, you know, timeframe.
+
+104
+00:28:59,380 --> 00:29:13,380
+These things are negotiable. So, depending on the prospect and complexity and, you know, the requirement, it can be, you know, negotiable.
+
+105
+00:29:13,380 --> 00:29:28,380
+And also, I'm also more interested in, you know, long-term collaboration with you. So, yeah, that's it. Yeah.
+
+106
+00:29:28,380 --> 00:29:32,380
+Okay. Thank you.
+
+107
+00:29:32,380 --> 00:29:55,380
+Yeah. Okay. So, because I have another meeting in a minute. So, I think we know everything. Let us talk it to, yeah, talk it to, we decide which version, but probably, if we would go, that would be probably just without reinforcement at first step, but let us discuss about this a little bit.
+
+108
+00:29:55,380 --> 00:30:13,380
+And I will get back to you. And in case we decide to go with that, I send you the drawings as an example that I sent you, I think, before, but just to be sure that on the end of the process, you know what we're supposed to achieve, right?
+
+109
+00:30:13,380 --> 00:30:28,380
+And we agree to this, and we have, like, agreement in the email, right? And so, everything would be perfect, you know, clear from both sides, for both sides.
+
+110
+00:30:28,380 --> 00:30:32,380
+And we would go from there, okay?
+
+111
+00:30:32,380 --> 00:30:36,420
+Okay. Yeah, it would work for good.
+
+112
+00:30:36,420 --> 00:31:00,420
+Yeah, no problem. So, I think if you, you know, send a more clearer document about the development of the project requirement, I can, you know, provide the more exact, more precise the timeframe and, you know,
+
+113
+00:31:00,420 --> 00:31:19,420
+I think, you know, you listed correctly that, you know, the style, the dimensions, the embeds, exactly what you said, I just would prefer to have it in the email, so we are on the same page, right?
+
+114
+00:31:19,420 --> 00:31:20,420
+Yeah.
+
+115
+00:31:20,420 --> 00:31:27,420
+What are we looking for? And we expect in this, and you know that we expect in this, and not more, not less, right?
+
+116
+00:31:27,420 --> 00:31:29,420
+Yeah.
+
+117
+00:31:29,420 --> 00:31:33,420
+So, we cover your side, and we cover our side, in this case, right?
+
+118
+00:31:33,420 --> 00:31:34,420
+Yeah.
+
+119
+00:31:34,420 --> 00:31:35,420
+Okay.
+
+120
+00:31:35,420 --> 00:31:48,420
+Okay. So, let us talk about matching, and I will get back to you maybe Monday, so we can still talk about that, because we're so busy that we're working, like, 15 hours a day.
+
+121
+00:31:48,420 --> 00:31:59,420
+Yes. Let's say sometime during next week, because Mondays might be crazy, and as you said, but we will get back to you, Brian, okay?
+
+122
+00:31:59,420 --> 00:32:21,420
+Okay. Yeah. So, I think I'm starting with the reinforcement automation is the practical first step, I think, and we can focus on getting, you know, more whole wall ticket, like, you know, geometry and openings and embeds and dimensions and sections and, you know, etc.
+
+123
+00:32:21,420 --> 00:32:37,420
+Especially the Tindall drawing style as close as possible to your approved examples, and then reinforcement can remain manual for now and become a separate phase later, if it makes business sense.
+
+124
+00:32:37,420 --> 00:32:59,420
+And also, please send me the representative and drawings you want us to use the final acceptance examples before development starts again prepare the clear reading scope, showing exactly what phase one includes our remains manual and the expected deliverables and type and narrative cost.
+
+125
+00:33:00,420 --> 00:33:15,420
+Yeah. And before we start, I will put everything clearly in writing, what finishes wall ticket should look like, and they require drawing style and all of etc.
+
+126
+00:33:15,420 --> 00:33:29,420
+And also, I will clearly in a state the reinforcement automation is outside the first phase, and you and machine can review the scope against your example drawings.
+
+127
+00:33:29,420 --> 00:33:41,420
+And once we both approve it, and that becomes a real target, and, you know, exactly what you are paying for, and I know exactly what I need to deliver.
+
+128
+00:33:41,420 --> 00:34:03,420
+I think this is more in a professional and transparent. And also, that's what I'm talking about. Yeah, I'm really, really interested in, you know, longer term collaboration and to build this production is really in a value in the AEC industry.
+
+129
+00:34:03,420 --> 00:34:16,420
+So, yeah, no problem about Monday, I understand you're both really busy. And so discuss it when you have time and just get back to me sometime next week.
+
+130
+00:34:16,420 --> 00:34:21,420
+Yes, we will. Thank you so much, Brian. Thank you.
+
+131
+00:34:21,420 --> 00:34:27,420
+Good meaning. See ya. Bye bye. Have a great day. See you next week.
+
+132
+00:34:27,420 --> 00:34:29,420
+Thank you.

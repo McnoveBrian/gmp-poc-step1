@@ -7,7 +7,7 @@ Revit add-in demo for GMP Architecture — precast wall shop-ticket automation (
 | **Client** | GMP Architecture LLC |
 | **Primary Revit** | 2025 (also builds for 2024) |
 | **Demo version** | 0.1.0 |
-| **Proposal** | [docs/PHASE1_PROPOSAL.md](docs/PHASE1_PROPOSAL.md) |
+| **Proposal** | [docs/TWO_PHASE_PROPOSAL.md](docs/TWO_PHASE_PROPOSAL.md) (current) · [docs/PHASE1_PROPOSAL.md](docs/PHASE1_PROPOSAL.md) (Sep 2026) |
 
 This repository includes the Phase 1 proposal materials and a **working demo add-in** you can load in Revit 2025 to show the basic end-to-end workflow on a simple wall panel.
 
@@ -104,7 +104,8 @@ Override root with environment variable `GMP_PLATFORM_ROOT` if needed.
 
 ## Documentation
 
-- [Phase 1 proposal](docs/PHASE1_PROPOSAL.md)  
+- [Two-phase proposal (Oct 2026)](docs/TWO_PHASE_PROPOSAL.md)  
+- [Phase 1 proposal (Sep 2026)](docs/PHASE1_PROPOSAL.md)  
 - [Requirements](docs/PROJECT_REQUIREMENTS.md)  
 - [Abbreviations](docs/ABBREVIATIONS.md)  
 - [Meeting summary](docs/GMP_Revit_to_AutoCAD_Precast_Automation_Meeting_Summary_2026_09.md)  
