@@ -3,7 +3,7 @@
 
 **To:** GMP Architecture LLC (Greg, Marcin)  
 **From:** Brian  
-**Date:** 3 October 2026  
+**Date:** 3 October 2026 (updated 6 October 2026: Revit / AutoCAD version compatibility, pricing note)  
 **Re:** Detailed proposal following our meeting on 1 October 2026 and the working POC  
 
 **Reference samples (acceptance baseline):**  
@@ -30,7 +30,9 @@ This proposal splits the work into two phases:
 
 **Recommendation:** Start with Phase 1. Your team uses the automated ticket and adds reinforcement by hand. After that workflow is proven in practice, decide whether Phase 2 adds enough value to justify the second investment.
 
-Budgets and timeframes are negotiable depending on final agreed scope, number of wall conditions, and milestone structure.
+**Revit versions:** both phases include support for **Revit 2024, 2025 and 2026** from one codebase, installed side by side, so projects on different Revit years work at the same time. Moving to a new Revit year later is a small, planned step, not a rewrite. See section 4.
+
+Budgets and timeframes are negotiable depending on final agreed scope, number of wall conditions, and milestone structure. A reduced Phase 1 is available at **$3,500** (section 7).
 
 ---
 
@@ -95,16 +97,57 @@ Phase 1 treats the visual and drafting standard as the definition of done for th
 
 ---
 
-## 4. Phase 1 — Wall ticket without reinforcement
+## 4. Version compatibility (Revit and AutoCAD upgrades)
+
+GMP works in one Revit release for a year or two and then moves to another, per project requirements. The add-in is built so that this is routine.
+
+### 4.1 How the add-in is split
+
+| Layer | What it does | Tied to the Revit year? |
+|-------|--------------|-------------------------|
+| **Revit reader** | Reads the selected panel and writes a ticket data file | **Yes**: a separate build per Revit year, all from the same source code |
+| **Ticket data file** (`PieceTicket` JSON) | Everything AutoCAD needs: geometry, openings, embeds, BOM data, title-block fields | **No**: a versioned, documented format |
+| **AutoCAD drawing engine** | Draws and plots the ticket inside a copy of your seed DWG | **No**: tied only to the AutoCAD release family |
+
+Only the thin Revit reader changes between Revit years. The drawing logic, your standards, and the BOM rules are not touched by a Revit upgrade.
+
+### 4.2 What already works (proof done before kickoff)
+
+- One codebase builds the add-in for **Revit 2024, 2025 and 2026**.
+- Verified on our machine: the add-in loads and runs its startup checks in **Revit 2024** and **Revit 2025**, and the drawing engine shipped in the Revit 2024 package drew and plotted a complete three-sheet ticket (panel FIP-1171) in AutoCAD 2025. A full ticket run inside Revit 2024 needs a model saved in 2024 and is part of kickoff testing. Revit 2026 builds cleanly; it is run-tested on the first machine with Revit 2026 installed.
+- One installer puts the right build into **every Revit year installed** on a workstation, side by side. A drafter can open a 2024 project in Revit 2024 and a 2025 project in Revit 2025 on the same day, each with the add-in.
+- The drawing engine runs in **AutoCAD 2025 and 2026** (one AutoCAD API family, one build). It no longer depends on a particular AutoCAD installation to be built.
+
+### 4.3 Moving to a new Revit year
+
+When GMP adopts a new Revit release, the steps are: add the new year's build, compile and fix any changed Revit API calls, test on a model saved in that year, and ship an updated installer. Earlier years stay supported for as long as projects use them.
+
+- **Typical effort:** 1–3 working days, most of it testing on your models.
+- **Known ahead:** Revit 2027 and AutoCAD 2027 move to Microsoft .NET 10. That is a planned step (new toolchain plus a second AutoCAD engine build), not a surprise.
+- **Your project files are never upgraded by the add-in.** It follows the Revit year of the project. (Opening a project in a newer Revit upgrades the file irreversibly; that is Revit's behaviour, and the add-in never asks for it.)
+
+### 4.4 Deployment note: code signing
+
+Revit warns about any add-in that is not digitally signed and asks again after every update. Signing the add-in with a code-signing certificate (about $200–$400 per year, GMP's own or one I hold for this work) removes that prompt for good. It is recommended before rollout to the whole team, but not required to start.
+
+### 4.5 Commercial terms for versions
+
+- **Included in Phase 1 (and Phase 2):** Revit 2024, 2025, 2026 and AutoCAD 2025, 2026.
+- **Each later Revit year** (e.g. 2027): fixed fee of $300–$600 depending on Autodesk's API changes, quoted when GMP decides to move. The same applies to a new AutoCAD release family.
+- Alternatively, an annual maintenance arrangement can cover version updates and small fixes; happy to propose one after Phase 1.
+
+---
+
+## 5. Phase 1 — Wall ticket without reinforcement
 
 **Fixed price:** $5,000  
 **Duration:** 2–3 weeks after kickoff and receipt of agreed acceptance samples  
 
-### 4.1 Objective
+### 5.1 Objective
 
 Deliver a production-usable wall shop-ticket workflow: from one selected wall panel in Revit to AutoCAD DWG + PDF sheets that a drafter can review, add reinforcement by hand, and issue with limited cleanup — looking as close as practical to your approved Tindall examples.
 
-### 4.2 In scope
+### 5.2 In scope
 
 | Area | Deliverable |
 |------|-------------|
@@ -121,8 +164,9 @@ Deliver a production-usable wall shop-ticket workflow: from one selected wall pa
 | **Standards** | Layers, blocks, dim styles, text styles, hatching presentation from seed DWG |
 | **Output** | Editable DWG + plotted PDF under the platform export path |
 | **Drafter hand-off** | Clear workflow for review, cleanup, and **manual reinforcement** |
+| **Revit / AutoCAD versions** | Builds for Revit 2024, 2025, 2026; engine for AutoCAD 2025, 2026; one installer for all installed Revit years (section 4) |
 
-### 4.3 Out of scope (Phase 1)
+### 5.3 Out of scope (Phase 1)
 
 - Automatic reinforcement, strands, mesh, or trim-bar placement  
 - Modeling rebar as 3D elements in Revit  
@@ -131,7 +175,7 @@ Deliver a production-usable wall shop-ticket workflow: from one selected wall pa
 - Batch processing of an entire building  
 - Full coverage of every rare one-off engineering exception (those are flagged for manual work)
 
-### 4.4 Suggested milestones
+### 5.4 Suggested milestones
 
 | Milestone | Timing | Outcome |
 |-----------|--------|---------|
@@ -139,9 +183,9 @@ Deliver a production-usable wall shop-ticket workflow: from one selected wall pa
 | **M1 — Style lock** | End of week 1 | Sheet 1 (or equivalent) style sample against approved example; dim / text / hatch review |
 | **M2 — Full ticket** | Mid Phase 1 | Three-sheet package for the primary acceptance panel (e.g. AFIP-1035) |
 | **M3 — Condition sweep** | Late Phase 1 | Agreed set of additional conditions (openings / embeds / pockets / corbels) |
-| **M4 — Handover** | End of Phase 1 | Installable add-in build, short usage notes, known-limitation list, cleanup checklist |
+| **M4 — Handover** | End of Phase 1 | Installer package covering every supported Revit year, short usage notes, known-limitation list, cleanup checklist, annual-upgrade checklist |
 
-### 4.5 Success criteria (Phase 1)
+### 5.5 Success criteria (Phase 1)
 
 Phase 1 is accepted when, for the agreed reference panel(s):
 
@@ -152,26 +196,26 @@ Phase 1 is accepted when, for the agreed reference panel(s):
 5. Unknown or unsupported conditions are flagged rather than silently invented.  
 6. Remaining AutoCAD work for covered cases is in the ~10–15% cleanup band (excluding reinforcement drafting, which remains manual by design).
 
-### 4.6 Assumptions
+### 5.6 Assumptions
 
 - Timely answers from GMP (within a few business days) on drafting conventions and exceptions.  
-- Revit **2025** and AutoCAD **2025** (accoreconsole) available for development and demo.  
+- Development and acceptance on Revit **2025** and AutoCAD **2025**, the release of the reference project; Revit 2024 / 2026 and AutoCAD 2026 verified with a model or machine GMP provides in that release.  
 - AFIP-1035 (and any extra tickets you supply) remain the visual / content acceptance baseline.  
 - Seed DWG, font map, and plot style (CTB) are available on the build machine.  
 - Scope stays locked to rectangular wall panels and the condition list agreed at kickoff.
 
 ---
 
-## 5. Phase 2 — Steel / reinforcement automation (optional)
+## 6. Phase 2 — Steel / reinforcement automation (optional)
 
 **Fixed price:** $3,000 (add-on after Phase 1)  
 **Duration:** 1–2 weeks after Phase 1 acceptance and receipt of engineering rules  
 
-### 5.1 Objective
+### 6.1 Objective
 
 Add a **rule-based reinforcement module** that draws fabrication reinforcement on the AutoCAD shop ticket from panel geometry, openings, parameters, and rules your engineering team provides — **without** placing 3D rebar in the Revit model.
 
-### 5.2 In scope
+### 6.2 In scope
 
 Depending on the rules you provide, Phase 2 can include:
 
@@ -185,14 +229,14 @@ Depending on the rules you provide, Phase 2 can include:
 
 Output remains **2D ticket graphics** (and schedules/callouts as agreed), generated when the ticket is created or regenerated.
 
-### 5.3 Out of scope (Phase 2)
+### 6.3 Out of scope (Phase 2)
 
 - Full 3D rebar modeling inside Revit  
 - Guaranteeing every special engineering case without a manual override path  
 - Structural design / calculation of reinforcement (software applies **your** rules; it does not replace the engineer)  
 - Expanding to beams / columns / slabs (separate future work)
 
-### 5.4 Why Phase 2 is recommended as a second step
+### 6.4 Why Phase 2 is recommended as a second step
 
 As discussed on 1 October:
 
@@ -202,7 +246,7 @@ As discussed on 1 October:
 
 After your team uses Phase 1 in practice, we can judge whether automation of reinforcement pays for itself.
 
-### 5.5 Success criteria (Phase 2)
+### 6.5 Success criteria (Phase 2)
 
 1. Agreed rule set is documented and implemented for the covered conditions.  
 2. Regenerating a ticket places the corresponding reinforcement graphics / callouts on the DWG.  
@@ -210,7 +254,7 @@ After your team uses Phase 1 in practice, we can judge whether automation of rei
 4. Unsupported or special cases are flagged for manual completion.  
 5. Acceptance checked against the same visual standard as Phase 1, plus the reinforcement presentation on the reference tickets.
 
-### 5.6 What I need from you for Phase 2
+### 6.6 What I need from you for Phase 2
 
 - Engineering logic per wall type / opening / edge condition (tables, markups, or worked examples).  
 - Confirmation of which reinforcement is mandatory on the ticket vs optional.  
@@ -218,7 +262,7 @@ After your team uses Phase 1 in practice, we can judge whether automation of rei
 
 ---
 
-## 6. Commercial summary
+## 7. Commercial summary
 
 | Item | Phase 1 | Phase 2 |
 |------|---------|---------|
@@ -228,6 +272,18 @@ After your team uses Phase 1 in practice, we can judge whether automation of rei
 | **Combined** | **$8,000** · **~3–5 weeks** | |
 
 Rates discussed previously ($25–$35/hour) informed these fixed figures. Fixed pricing keeps the commercial picture simple for your internal decision. If the agreed condition library expands significantly beyond the kickoff list, we discuss a change order before expanding work.
+
+### Why Phase 1 is $5,000, and the $3,500 option
+
+The $3,000–$5,000 range from our first conversation was an early estimate. The $5,000 figure is the top of that range because the full Phase 1 now includes the complete condition sweep (openings, pockets, corbels, embeds, edge details) and multi-version support for Revit 2024–2026 with one installer, which answers the version question up front instead of as later paid work.
+
+If you prefer to start lower, a **reduced Phase 1 at $3,500 (about 2 weeks)** delivers the same pipeline, style lock and installer for the primary panel type (the AFIP-1035 family: rectangular insulated panel with openings, embeds, standard sections, BOM and title block), with the wider condition sweep (milestone M3) left for a follow-up. Everything built in the reduced phase carries forward; nothing is redone.
+
+| Option | Price | Timeframe | Coverage |
+|--------|-------|-----------|----------|
+| Phase 1 (full) | $5,000 | 2–3 weeks | Full agreed condition list, all milestones M0–M4 |
+| Phase 1 (reduced) | $3,500 | ~2 weeks | Primary panel type; M0, M1, M2, M4; M3 condition sweep later |
+| Phase 2 | $3,000 | 1–2 weeks | Rule-based reinforcement (unchanged) |
 
 **Flexibility:** Budget, timeframe, and milestone payment structure are negotiable. I am interested in longer-term collaboration with GMP on walls and later other precast elements — not only a single isolated phase.
 
@@ -244,7 +300,7 @@ Alternative structures (weekly, milestone-only, or single payment on delivery) a
 
 ---
 
-## 7. Working process before development starts
+## 8. Working process before development starts
 
 Before coding against the production scope, I will prepare a **detailed written scope** covering:
 
@@ -258,7 +314,7 @@ Both sides approve that document; it becomes the shared target for what you are 
 
 ---
 
-## 8. Helpful materials (optional, not required to proceed)
+## 9. Helpful materials (optional, not required to proceed)
 
 Additional practical examples accelerate correctness and reduce assumptions:
 
@@ -272,7 +328,7 @@ The more representative the set, the better the recurring rules and exceptions c
 
 ---
 
-## 9. Risks and how we manage them
+## 10. Risks and how we manage them
 
 | Risk | Mitigation |
 |------|------------|
@@ -281,11 +337,13 @@ The more representative the set, the better the recurring rules and exceptions c
 | Too many rare wall conditions | Lock Phase 1 condition list at kickoff; change order for expansion |
 | Rebar rules incomplete or contradictory | Keep rebar in Phase 2; require written rules before build |
 | Revit / AutoCAD file locks during build | Documented rebuild path; DeployAddin toggles; no edits to `samples/` originals |
+| GMP moves to a new Revit or AutoCAD release | Per-year builds from one codebase; version-neutral ticket data and drawing engine; annual-upgrade checklist; typical 1–3 days (section 4) |
+| Revit security prompt on every update | Code-sign the add-in before team-wide rollout (section 4.4) |
 | Scope creep into beams / columns | Explicitly Phase 1/2 out of scope; roadmap later |
 
 ---
 
-## 10. After these phases
+## 11. After these phases
 
 If Phase 1 (and optionally Phase 2) works in production, the same platform can grow to:
 
@@ -298,13 +356,19 @@ Phase 1 is built so expansion is an addition, not a rewrite.
 
 ---
 
-## 11. Decision request
+## 12. Decision request
 
 Please review the two options and let me know:
 
 1. **Phase 1 only** ($5,000 / 2–3 weeks) — recommended first step  
-2. **Phase 1 + Phase 2** ($8,000 / ~3–5 weeks) — if you already want reinforcement automation committed  
-3. Any adjustments to scope, budget, schedule, or payment structure  
+2. **Phase 1 reduced** ($3,500 / ~2 weeks) — primary panel type first, condition sweep later  
+3. **Phase 1 + Phase 2** ($8,000 / ~3–5 weeks) — if you already want reinforcement automation committed  
+4. Any adjustments to scope, budget, schedule, or payment structure  
+
+And, for version planning:
+
+- Which **Revit** and **AutoCAD** years your projects use today, and which you expect to move to next  
+- How many workstations will run the add-in, and whether GMP has a **code-signing certificate**  
 
 Once you decide, I will issue the detailed kickoff scope for signature and list the exact acceptance drawings. I am ready to start as soon as we are aligned in writing.
 
