@@ -44,13 +44,13 @@ internal static class SheetLayoutHelper
             else
             {
                 // Full-bleed / border title block — inset using the inner empty area heuristic.
-                var reserve = Math.Clamp(settings.TitleBlockRightReserve, 0.15, 0.45);
+                var reserve = Math.Max(0.15, Math.Min(settings.TitleBlockRightReserve, 0.45));
                 maxU = minU + (outline.Max.U - outline.Min.U) * (1.0 - reserve);
             }
         }
         else
         {
-            var reserve = Math.Clamp(settings.TitleBlockRightReserve, 0.15, 0.45);
+            var reserve = Math.Max(0.15, Math.Min(settings.TitleBlockRightReserve, 0.45));
             maxU = minU + (outline.Max.U - outline.Min.U) * (1.0 - reserve);
         }
 
@@ -162,7 +162,7 @@ internal static class SheetLayoutHelper
             if (s >= scale) return s;
         }
 
-        return StandardScales[^1];
+        return StandardScales[StandardScales.Length - 1];
     }
 
     public static XYZ CenterOf(BoundingBoxUV area) =>

@@ -41,12 +41,16 @@ public class GenerateTicketDrawingCommand : ExternalCommand
         var seed = settings.SeedDwgPath;
         if (string.IsNullOrWhiteSpace(seed) || !File.Exists(seed))
         {
+            var detail = $"Settings file:\n{SettingsStore.FilePath}";
+            if (SettingsStore.LastLoadError != null)
+                detail += $"\n\nThe file could not be read, so defaults were used:\n{SettingsStore.LastLoadError}";
+
             TicketDialogs.Problem(
                 "The client's template drawing is not set",
                 "The ticket is drawn into a copy of the client's approved DWG, so it inherits their " +
                 "layers, styles, blocks and title blocks. Set SeedDwgPath in the settings file to " +
                 "that drawing, then try again.",
-                $"Settings file:\n{Path.Combine(PlatformPaths.Config, "settings.json")}");
+                detail);
             return;
         }
 
@@ -93,7 +97,9 @@ public class GenerateTicketDrawingCommand : ExternalCommand
 
         var result = AcadRunner.Run(
             ticketPath,
-            seed,
+            // Checked above; .NET Framework (Revit 2024) lacks the annotation that lets the
+            // compiler see that through IsNullOrWhiteSpace.
+            seed!,
             pluginDll,
             outputFolder,
             settings.AutoCadConsolePath,

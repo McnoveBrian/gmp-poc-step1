@@ -8,9 +8,19 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>GmpPlatform.Revit</RootNamespace>
     <AssemblyName>GmpPlatform.Revit</AssemblyName>
-    <Description>GMP Production Platform — Revit add-in (demo; primary target Revit 2025)</Description>
-    <Configurations>Debug.R24;Release.R24;Debug.R25;Release.R25</Configurations>
+    <Description>GMP Production Platform — Revit add-in (one build per Revit release: 2024, 2025, 2026)</Description>
+    <!--
+      One configuration per Revit release. The Nice3point SDK reads the year from the name and
+      picks the runtime: R24 builds for .NET Framework 4.8, R25/R26 for .NET 8. R27 needs .NET 10
+      and a .NET 10 SDK, so it is added when GMP moves to 2027 (see RUNBOOK "Annual Revit upgrade").
+    -->
+    <Configurations>Debug.R24;Release.R24;Debug.R25;Release.R25;Debug.R26;Release.R26</Configurations>
   </PropertyGroup>
+
+  <Target Name="GmpRequireSupportedRevit" BeforeTargets="Restore;CollectPackageReferences;BeforeBuild"
+          Condition="'$(RevitVersion)' != '2024' AND '$(RevitVersion)' != '2025' AND '$(RevitVersion)' != '2026'">
+    <Error Text="Configuration '$(Configuration)' does not name a supported Revit release. Use Debug.R24/R25/R26 or Release.R24/R25/R26." />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\GmpPlatform.Core\GmpPlatform.Core.csproj" />
@@ -24,10 +34,15 @@
 
       Without this, a clean clone could build the add-in before the engine, silently skip the
       copy, and ship an add-in that reports its own drawing engine as missing at run time.
+
+      The engine is .NET 8 (it runs inside AutoCAD) while the R24 add-in is .NET Framework 4.8,
+      so the framework compatibility check is skipped and the engine builds for its own target.
     -->
     <ProjectReference Include="..\GmpPlatform.Acad\GmpPlatform.Acad.csproj"
                       ReferenceOutputAssembly="false"
                       Private="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      SetTargetFramework="TargetFramework=net8.0-windows"
                       SetConfiguration="Configuration=Release" />
   </ItemGroup>
 
@@ -70,12 +85,29 @@
     compiled against is whatever Autodesk published most recently at the moment someone
     restores. Two builds of the same commit can then target different Revit APIs, and the
     add-in that is handed over is not the add-in that was tested. Bump these deliberately.
+
+    Pinned per release: each Revit year compiles against its own API. A single shared pin once
+    made the R24 build compile against the 2025 API, so it was not a Revit 2024 add-in at all.
   -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' == '2024'">
+    <PackageReference Include="Nice3point.Revit.Toolkit" Version="2024.3.0" />
+    <PackageReference Include="Nice3point.Revit.Extensions" Version="2024.3.5" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2024.3.60" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2024.3.60" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' == '2025'">
     <PackageReference Include="Nice3point.Revit.Toolkit" Version="2025.2.0" />
     <PackageReference Include="Nice3point.Revit.Extensions" Version="2025.2.4" />
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2025.4.60" />
     <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.4.60" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' == '2026'">
+    <PackageReference Include="Nice3point.Revit.Toolkit" Version="2026.1.0" />
+    <PackageReference Include="Nice3point.Revit.Extensions" Version="2026.1.5" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2026.4.10" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.4.10" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="JetBrains.Annotations" Version="2026.2.0" PrivateAssets="all" />
   </ItemGroup>
 

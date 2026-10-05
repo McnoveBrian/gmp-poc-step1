@@ -22,6 +22,15 @@ public class Application : ExternalApplication
         var version = Application.ControlledApplication.VersionNumber;
         PlatformLog.Initialize(version);
         PlatformLog.Logger.Information("GMP Production Platform starting. Revit {Version}", version);
+
+        var settings = SettingsStore.Load();
+        if (SettingsStore.LastLoadError != null)
+            PlatformLog.Logger.Warning("Settings file {Path} could not be read; defaults in use. {Error}",
+                SettingsStore.FilePath, SettingsStore.LastLoadError);
+        else
+            PlatformLog.Logger.Information("Settings read from {Path}. Seed drawing: {Seed}",
+                SettingsStore.FilePath, settings.SeedDwgPath ?? "(not set)");
+
         RibbonBuilder.Create(Application);
 
         _smokeArmed = string.Equals(

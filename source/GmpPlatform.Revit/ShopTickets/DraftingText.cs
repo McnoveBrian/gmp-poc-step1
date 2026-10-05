@@ -57,7 +57,7 @@ internal static class DraftingText
         // Fit to content when possible: estimate paper width from longest line, then cap by column budget.
         var contentPaperWidth = EstimatePaperWidthFt(doc, textTypeId, text);
         var width = Math.Min(paperWidthFt, contentPaperWidth);
-        width = Math.Clamp(width, minW, maxW);
+        width = Math.Max(minW, Math.Min(width, maxW));
 
         // Zero width means unwrapped — avoid if caller asked for wrapping with a positive budget.
         if (width <= minW * 1.01 && contentPaperWidth <= minW * 1.5)
@@ -86,7 +86,7 @@ internal static class DraftingText
             var modelW = Math.Abs(bb.Max.X - bb.Min.X);
             var paperFromBox = modelW / Math.Max(view.Scale, 1);
             // Only shrink; never expand past the box we already set.
-            var tightened = Math.Clamp(Math.Min(current, paperFromBox * 1.08), minW, maxW);
+            var tightened = Math.Max(minW, Math.Min(Math.Min(current, paperFromBox * 1.08), maxW));
             if (tightened < current * 0.98)
                 note.Width = tightened;
         }

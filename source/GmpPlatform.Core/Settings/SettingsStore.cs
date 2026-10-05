@@ -20,9 +20,17 @@ public static class SettingsStore
 
     public static string FilePath => Path.Combine(GmpPlatform.Core.PlatformPaths.Config, "settings.json");
 
+    /// <summary>
+    /// Why the last <see cref="Load"/> fell back to defaults, or null when the file was read
+    /// (or simply does not exist yet). Falling back keeps Revit usable, but a hand-edited
+    /// file with a typo must not look the same as "nothing configured".
+    /// </summary>
+    public static string? LastLoadError { get; private set; }
+
     public static PlatformSettings Load()
     {
         GmpPlatform.Core.PlatformPaths.EnsureDirectories();
+        LastLoadError = null;
         try
         {
             if (!File.Exists(FilePath))
@@ -32,8 +40,9 @@ public static class SettingsStore
             return JsonSerializer.Deserialize<PlatformSettings>(json, JsonOptions)
                    ?? new PlatformSettings();
         }
-        catch
+        catch (Exception ex)
         {
+            LastLoadError = $"{ex.GetType().Name}: {ex.Message}";
             return new PlatformSettings();
         }
     }
