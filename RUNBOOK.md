@@ -79,8 +79,9 @@ installed; `-Uninstall` removes it; `-AllUsers` (elevated) installs for every us
 dotnet test tests\GmpPlatform.Core.Tests\GmpPlatform.Core.Tests.csproj
 ```
 
-61 tests, about a second. They cover the hand-off contract, the unit rounding, and the client's
-drafting conventions — the station direction, the piece placement, the callout offset. If one
+77 tests, about a second. They cover the hand-off contract, the unit rounding, the client's
+drafting conventions — the station direction, the piece placement, the callout offset — which
+layout gets which sheet, and how a standards profile is read. If one
 of the `SheetConventions` tests fails, the sheet is about to come out mirrored or offset;
 that is what they are there to stop.
 
@@ -109,8 +110,53 @@ that is what they are there to stop.
 - `ShowDeveloperTools` (default `false`) adds a *Developer* panel with the retired *Wall
   Ticket* route, *Export DWG* and *Verify*. **Leave it off on the demo machine**: *Verify*
   generates placeholder Revit sheets, and clicking it in front of a client puts them on screen.
+- `TifLayoutName`, `BifLayoutName`, `SectionsLayoutName` (optional) name the seed layouts that
+  carry each sheet. Left out, the layouts are taken in **tab order**: the first two layouts with
+  a main viewport are TIF and BIF, the next layout with viewports is the sections sheet. Set
+  them when a seed's tabs are in a different order; a name that is missing or unusable is
+  reported in the draw log (`sheet roles: ...`) and tab order fills the gap.
+- `DrawGeneratedRebar` (default `false`): reinforcement is the drafter's job, as agreed in the
+  meeting. `true` brings back the rule-generated bars (marked `*` and listed in the derived
+  note) for pieces whose model carries no RSX bars.
+- `StandardsProfilePath` (optional) points at a drafting-standards profile; see below.
 
 The file is read case-insensitively, so `seedDwgPath` also works.
+
+### Drafting standards profile (`standards.json`)
+
+Every layer, style, block, attribute tag and fixed label the engine writes comes from a
+standards profile. With no file, the built-in profile is the approved Tindall / AFIP-1035
+seed, and the output is exactly what it has always been. A different seed, plant or client
+standard is a JSON file, not a code change:
+
+- Where: `StandardsProfilePath` in `settings.json`, else
+  `%ProgramData%\GMP\Platform\config\standards.json`, else built-in.
+- List only what differs; everything left out keeps the Tindall default. Comments and trailing
+  commas are allowed.
+- The draw log says which profile was used: `standards: <name> (<path>)`. A file that is
+  missing or does not parse falls back to the built-in profile with a warning — it never stops
+  the drawing.
+
+```jsonc
+{
+  "name": "Plant B standard",
+  "layers":     { "text": "A-TEXT", "dimensions": "A-DIMS" },
+  "styles":     { "dimension": "PlantB-4", "insulationHatchPattern": "ANSI31" },
+  "blocks":     { "bomRow": "PB_BOM", "titleBlockPrefix": "PB_TITLE" },
+  "titleBlock": { "jobNumber": "JOBNO" },
+  "labels":     { "solidZone": "SOLID" }
+}
+```
+
+Sections: `layers` (panel, dimensions, text, insert, insulation, insulationHatch, tags,
+derived), `styles` (dimension, text, insulationHatchPattern, insulationHatchScale), `blocks`
+(sectionMarker, sectionMarkerLetterTag, rebar, titleBlockPrefix, bomRow, bomPartNumberTag,
+bomQuantityTag), `titleBlock` (one attribute tag per ticket field) and `labels` (the fixed
+wording on the sheets). The full default file, as a starting point, is what
+`StandardsStore.DefaultsJson()` returns. Names should exist in the seed: a missing layer is
+created; a missing dimension or text style falls back to the drawing's current style with a
+warning; a missing section-marker, title-block or BOM block is reported in the draw log and
+that content is left out.
 
 ---
 

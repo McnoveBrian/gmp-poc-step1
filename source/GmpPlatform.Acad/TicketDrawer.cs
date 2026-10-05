@@ -1,6 +1,7 @@
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using GmpPlatform.Core.Rebar;
+using GmpPlatform.Core.Settings;
 using GmpPlatform.Core.Tickets;
 
 namespace GmpPlatform.Acad;
@@ -17,18 +18,23 @@ namespace GmpPlatform.Acad;
 /// </summary>
 internal sealed class TicketDrawer
 {
-    private const string LayerPanel = "PANEL";
-    private const string LayerDims = "DIMENSIONS";
-    private const string LayerText = "TEXT";
-    private const string LayerInsert = "INSERT";
-    private const string LayerDerived = "GMP-DERIVED";
-    private const string DimStyleName = "Tindall-4";
-    private const string TextStyleName = "Tindall";
+    // Names come from the client's standards profile (built-in default: the Tindall seed).
+    private string LayerPanel => _standards.Layers.Panel;
+    private string LayerDims => _standards.Layers.Dimensions;
+    private string LayerText => _standards.Layers.Text;
+    private string LayerInsert => _standards.Layers.Insert;
+    private string LayerInsulation => _standards.Layers.Insulation;
+    private string LayerInsulationHatch => _standards.Layers.InsulationHatch;
+    private string LayerDerived => _standards.Layers.Derived;
+    private string DimStyleName => _standards.Styles.Dimension;
+    private string TextStyleName => _standards.Styles.Text;
 
+    private readonly StandardsProfile _standards;
     private readonly Database _db;
     private readonly Transaction _tr;
     private readonly PieceTicket _ticket;
     private readonly DrawLog _log;
+    private readonly PlatformSettings _settings;
     private readonly RebarRules _rebarRules = new();
     private readonly IReadOnlyList<RebarGroup> _rebar;
 
@@ -77,18 +83,27 @@ internal sealed class TicketDrawer
     private double StationX(Point3d origin, double station) =>
         SheetConventions.StationToDrawingX(origin.X, _ticket.Dimensions.LengthIn, station);
 
-    public TicketDrawer(Database db, Transaction tr, PieceTicket ticket, DrawLog log)
+    public TicketDrawer(Database db, Transaction tr, PieceTicket ticket, DrawLog log,
+        PlatformSettings settings, StandardsProfile standards)
     {
         _db = db;
         _tr = tr;
         _ticket = ticket;
         _log = log;
+        _settings = settings;
+        _standards = standards;
 
-        // The model carries no reinforcement for wall panels, so field bars are
-        // rule-generated here and drawn as derived content. If a future model does
-        // carry rebar, the exporter should supply it and this becomes a fallback.
+        // The model carries no reinforcement for wall panels. Rule-generated field bars are
+        // Phase 2 work and off unless DrawGeneratedRebar is set; in Phase 1 the drafter adds
+        // reinforcement by hand. If a future model does carry rebar, the exporter should
+        // supply it and generation becomes a fallback.
         var modelled = ticket.Parts.Any(p => p.PartNumber.StartsWith("RSX", StringComparison.OrdinalIgnoreCase));
-        _rebar = modelled ? Array.Empty<RebarGroup>() : RebarPlanner.Plan(ticket.Dimensions, _rebarRules);
+        _rebar = !settings.DrawGeneratedRebar || modelled
+            ? Array.Empty<RebarGroup>()
+            : RebarPlanner.Plan(ticket.Dimensions, _rebarRules);
+        _log.Info(settings.DrawGeneratedRebar
+            ? $"generated reinforcement: on ({_rebar.Count} group(s))"
+            : "generated reinforcement: off (DrawGeneratedRebar); reinforcement is added by the drafter");
     }
 
     public void Draw()
@@ -103,10 +118,9 @@ internal sealed class TicketDrawer
         // layout, "3 of 3" the sections. Roles used to be inferred from whether a window could
         // hold the piece, which broke as soon as viewports were rescaled to fit - and silently
         // drew nothing for any piece larger than the seed's layout.
-        var settings = GmpPlatform.Core.Settings.SettingsStore.Load();
         var roles = SheetRoles.Assign(
             windows.Select(w => new SheetCandidate(w.Layout, w.TabOrder, w.Main != null, w.All.Count)),
-            settings.TifLayoutName, settings.BifLayoutName, settings.SectionsLayoutName);
+            _settings.TifLayoutName, _settings.BifLayoutName, _settings.SectionsLayoutName);
         foreach (var warning in roles.Warnings) _log.Warn(warning);
 
         SheetWindow? Role(string? layout) => windows.FirstOrDefault(w => w.Layout == layout);
@@ -319,7 +333,7 @@ internal sealed class TicketDrawer
         if (d.InsulationLengthIn > 0 && d.InsulationLengthIn < d.LengthIn)
         {
             var x = left + d.InsulationLengthIn;
-            AddLine(x, bottom, x, top, "INSULATION");
+            AddLine(x, bottom, x, top, LayerInsulation);
         }
 
         // Each part at its depth, so the edge view shows which face it belongs to.
@@ -352,7 +366,7 @@ internal sealed class TicketDrawer
 
         Append(new MText
         {
-            Contents = "SIF VIEW",
+            Contents = _standards.Labels.SifView,
             Location = new Point3d((left + right) / 2.0, bottom - SifDimOffset - 14.0, 0),
             Attachment = AttachmentPoint.TopCenter,
             TextHeight = textHeight * 1.3,
@@ -374,12 +388,12 @@ internal sealed class TicketDrawer
     private void AddLine(double x0, double y0, double x1, double y1, string layer) =>
         Append(new Line(new Point3d(x0, y0, 0), new Point3d(x1, y1, 0)) { Layer = EnsureLayer(layer, 7) });
 
-    /// <summary>Insulation in the client's own pattern: ANSI37 at scale 5.</summary>
+    /// <summary>Insulation in the client's own pattern (Tindall: ANSI37 at scale 5).</summary>
     private void AddInsulationHatch(double x0, double y0, double x1, double y1, double annotationScale)
     {
         if (y1 - y0 <= 0.01) return;
 
-        var boundary = new Polyline(4) { Layer = EnsureLayer("INSULATION HATCH", 7), Closed = true };
+        var boundary = new Polyline(4) { Layer = EnsureLayer(LayerInsulationHatch, 7), Closed = true };
         boundary.AddVertexAt(0, new Point2d(x0, y0), 0, 0, 0);
         boundary.AddVertexAt(1, new Point2d(x1, y0), 0, 0, 0);
         boundary.AddVertexAt(2, new Point2d(x1, y1), 0, 0, 0);
@@ -388,12 +402,12 @@ internal sealed class TicketDrawer
 
         try
         {
-            var hatch = new Hatch { Layer = EnsureLayer("INSULATION HATCH", 7) };
+            var hatch = new Hatch { Layer = EnsureLayer(LayerInsulationHatch, 7) };
             Append(hatch);
             // The client draws this pattern at scale 5 in their 1:19.2 sections. Held at 5 in
             // a 1:64 view the band comes out solid black, so it follows the view scale.
-            hatch.PatternScale = 5.0 * annotationScale / 19.2;
-            hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI37");
+            hatch.PatternScale = _standards.Styles.InsulationHatchScale * annotationScale / 19.2;
+            hatch.SetHatchPattern(HatchPatternType.PreDefined, _standards.Styles.InsulationHatchPattern);
             hatch.Associative = false;
             hatch.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { boundary.ObjectId });
             hatch.EvaluateHatch(true);
@@ -502,14 +516,14 @@ internal sealed class TicketDrawer
         try
         {
             var table = (BlockTable)_tr.GetObject(_db.BlockTableId, OpenMode.ForRead);
-            if (!table.Has("REBAR")) return false;
+            if (!table.Has(_standards.Blocks.Rebar)) return false;
 
             // RSX 05 480 -> a #5 bar, 480" long. Length comes from the geometry we just
             // computed rather than the name, so a spliced or trimmed bar stays honest.
             var digits = group.PartNumber.Length >= 5 ? group.PartNumber.Substring(3, 2) : "";
             if (!int.TryParse(digits, out var size) || size <= 0) return false;
 
-            var reference = new BlockReference(a, table["REBAR"])
+            var reference = new BlockReference(a, table[_standards.Blocks.Rebar])
             {
                 Layer = layer,
                 Rotation = Math.Atan2(b.Y - a.Y, b.X - a.X)
@@ -567,7 +581,7 @@ internal sealed class TicketDrawer
         }
 
         var drawer = new SectionDrawer(
-            _db, _tr, _ticket, _log,
+            _db, _tr, _ticket, _log, _standards,
             TextStyleId, DimStyleId, Append, EnsureLayer);
 
         var cuts = drawer.PlanCuts(sectionSheet.All.Count);
@@ -603,8 +617,8 @@ internal sealed class TicketDrawer
     private void DrawViewTitle(Point3d origin, double annotationScale, string face)
     {
         var title = face.Equals("BIF", StringComparison.OrdinalIgnoreCase)
-            ? "BOTTOM FINISH LAYOUT \\U+2013 CONCRETE REMOVED"
-            : "TIF VIEW";
+            ? _standards.Labels.BifView
+            : _standards.Labels.TifView;
 
         var note = new MText
         {
@@ -655,17 +669,18 @@ internal sealed class TicketDrawer
 
         // Measured, and not symmetric: START sits 2" clear of the datum end, STOP 3.2" inside
         // the far end.
-        EndLabel("START PANEL", StationX(origin, 0) + 2.0);
-        EndLabel("STOP PANEL", StationX(origin, d.LengthIn) + 3.2);
+        EndLabel(_standards.Labels.StartPanel, StationX(origin, 0) + 2.0);
+        EndLabel(_standards.Labels.StopPanel, StationX(origin, d.LengthIn) + 3.2);
 
         // "MARK END", boxed, in the top-left corner of the view window.
+        var markEnd = _standards.Labels.MarkEnd;
         var markHeight = 8.625 * annotationScale / 64.0;
         var markX = window.CenterX - window.Width / 2.0 + 20.0;
         var markY = window.CenterY + window.Height / 2.0 - 20.0;
 
         Append(new MText
         {
-            Contents = "MARK END",
+            Contents = markEnd,
             Location = new Point3d(markX, markY, 0),
             Attachment = AttachmentPoint.TopLeft,
             TextHeight = markHeight,
@@ -674,7 +689,7 @@ internal sealed class TicketDrawer
         });
 
         var pad = markHeight * 0.5;
-        var boxWidth = "MARK END".Length * markHeight * 0.62 + pad * 2;
+        var boxWidth = markEnd.Length * markHeight * 0.62 + pad * 2;
         AddRect(markX - pad, markY - markHeight - pad, markX + boxWidth - pad, markY + pad, LayerText);
     }
 
@@ -693,17 +708,18 @@ internal sealed class TicketDrawer
         var x = StationX(origin, boundaryStation);
         var line = new Line(new Point3d(x, origin.Y, 0), new Point3d(x, origin.Y + d.HeightIn, 0))
         {
-            Layer = EnsureLayer("INSULATION", 7)
+            Layer = EnsureLayer(LayerInsulation, 7)
         };
         Append(line);
 
+        var labels = _standards.Labels;
         var label = new MText
         {
-            Contents = $"START INSUL. \\P{TicketUnits.FeetInches(d.InsulationLengthIn)} (SNX100)",
+            Contents = $"{labels.StartInsulation} \\P{TicketUnits.FeetInches(d.InsulationLengthIn)} ({labels.InsulationPartNumber})",
             Attachment = AttachmentPoint.TopRight,
             Location = new Point3d(x - 4.0, origin.Y + d.HeightIn - 6.0, 0),
             TextHeight = 3.0 * annotationScale / 64.0,
-            Layer = EnsureLayer("INSULATION", 7),
+            Layer = EnsureLayer(LayerInsulation, 7),
             TextStyleId = TextStyleId()
         };
         Append(label);
@@ -713,16 +729,16 @@ internal sealed class TicketDrawer
             var y = origin.Y + d.HeightIn - d.SolidZoneTopIn;
             var zone = new Line(new Point3d(origin.X, y, 0), new Point3d(origin.X + d.LengthIn, y, 0))
             {
-                Layer = EnsureLayer("INSULATION", 7)
+                Layer = EnsureLayer(LayerInsulation, 7)
             };
             Append(zone);
 
             var zoneLabel = new MText
             {
-                Contents = $"{TicketUnits.FeetInches(d.SolidZoneTopIn)} SOLID ZONE",
+                Contents = $"{TicketUnits.FeetInches(d.SolidZoneTopIn)} {labels.SolidZone}",
                 Location = new Point3d(origin.X + d.LengthIn + 4.0, y, 0),
                 TextHeight = 3.0 * annotationScale / 64.0,
-                Layer = EnsureLayer("INSULATION", 7),
+                Layer = EnsureLayer(LayerInsulation, 7),
                 TextStyleId = TextStyleId()
             };
             Append(zoneLabel);
@@ -1102,37 +1118,39 @@ internal sealed class TicketDrawer
         // than blank. A blank field reads as a broken tool; "<?>" reads as a question, and
         // it is a question GMP can answer in one sentence at the demo.
         var id = _ticket.Identity;
+        var tag = _standards.TitleBlock;
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["MARK"] = Text(id.Mark),
-            ["PID"] = Text(id.Pid),
-            ["DESNO"] = Text(id.DesignNo),
-            ["CODE"] = Text(id.Code),
-            ["JOB_NO"] = Text(id.JobNumber),
-            ["PROJECT"] = Text(id.ProjectName),
-            ["PLANT"] = Text(id.Plant),
-            ["DRN"] = Text(id.DrawnBy),
-            ["CHK"] = Text(id.CheckedBy),
-            ["PJ"] = Text(id.ProjectLead),
-            ["ECHK"] = Text(id.EngineerChecked),
-            ["JOBUSE"] = Text(id.ReleasedForJobUse),
-            ["REV"] = Text(id.Revision),
-            ["REQ_NO"] = id.RequiredCount.ToString(),
-            ["LENGTH"] = (_ticket.Dimensions.LengthIn / 12.0).ToString("0.00"),
-            ["WIDTH"] = (_ticket.Dimensions.HeightIn / 12.0).ToString("0.00"),
-            ["WT"] = Value(_ticket.Quantities.WeightLb > 0, _ticket.Quantities.WeightLb.ToString("#,##0")),
-            ["REL"] = Value(_ticket.Quantities.ReleaseStrengthPsi > 0, _ticket.Quantities.ReleaseStrengthPsi.ToString()),
-            ["28DAY"] = Value(_ticket.Quantities.TwentyEightDayStrengthPsi > 0, _ticket.Quantities.TwentyEightDayStrengthPsi.ToString())
+            [tag.Mark] = Text(id.Mark),
+            [tag.Pid] = Text(id.Pid),
+            [tag.DesignNo] = Text(id.DesignNo),
+            [tag.Code] = Text(id.Code),
+            [tag.JobNumber] = Text(id.JobNumber),
+            [tag.Project] = Text(id.ProjectName),
+            [tag.Plant] = Text(id.Plant),
+            [tag.DrawnBy] = Text(id.DrawnBy),
+            [tag.CheckedBy] = Text(id.CheckedBy),
+            [tag.ProjectLead] = Text(id.ProjectLead),
+            [tag.EngineerChecked] = Text(id.EngineerChecked),
+            [tag.ReleasedForJobUse] = Text(id.ReleasedForJobUse),
+            [tag.Revision] = Text(id.Revision),
+            [tag.RequiredCount] = id.RequiredCount.ToString(),
+            [tag.Length] = (_ticket.Dimensions.LengthIn / 12.0).ToString("0.00"),
+            [tag.Width] = (_ticket.Dimensions.HeightIn / 12.0).ToString("0.00"),
+            [tag.Weight] = Value(_ticket.Quantities.WeightLb > 0, _ticket.Quantities.WeightLb.ToString("#,##0")),
+            [tag.ReleaseStrength] = Value(_ticket.Quantities.ReleaseStrengthPsi > 0, _ticket.Quantities.ReleaseStrengthPsi.ToString()),
+            [tag.TwentyEightDayStrength] = Value(_ticket.Quantities.TwentyEightDayStrengthPsi > 0, _ticket.Quantities.TwentyEightDayStrengthPsi.ToString())
         };
 
         var filled = 0;
+        var titleBlocks = 0;
         foreach (var blockRef in AllBlockReferences())
         {
-            var name = BlockName(blockRef);
-            if (!name.StartsWith("T_SHOP", StringComparison.OrdinalIgnoreCase) &&
-                !name.Equals("t_shop2", StringComparison.OrdinalIgnoreCase))
+            // Case-insensitive, so the seed's "t_shop2" matches the "T_SHOP" prefix too.
+            if (!BlockName(blockRef).StartsWith(_standards.Blocks.TitleBlockPrefix, StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            titleBlocks++;
             foreach (ObjectId attId in blockRef.AttributeCollection)
             {
                 if (_tr.GetObject(attId, OpenMode.ForRead) is not AttributeReference att) continue;
@@ -1147,6 +1165,9 @@ internal sealed class TicketDrawer
                 filled++;
             }
         }
+
+        if (titleBlocks == 0)
+            _log.Warn($"No title block named '{_standards.Blocks.TitleBlockPrefix}...' found in the seed; the title block was not filled.");
 
         return filled;
     }
@@ -1163,13 +1184,14 @@ internal sealed class TicketDrawer
     /// </summary>
     private int FillBillOfMaterial()
     {
+        var blocks = _standards.Blocks;
         var allRows = AllBlockReferences()
-            .Where(b => BlockName(b).Equals("T_S_BOM", StringComparison.OrdinalIgnoreCase))
+            .Where(b => BlockName(b).Equals(blocks.BomRow, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (allRows.Count == 0)
         {
-            _log.Warn("No T_S_BOM rows found in the seed; the bill of material was not filled.");
+            _log.Warn($"No {blocks.BomRow} rows found in the seed; the bill of material was not filled.");
             return 0;
         }
 
@@ -1219,8 +1241,8 @@ internal sealed class TicketDrawer
                 if (_tr.GetObject(attId, OpenMode.ForRead) is not AttributeReference att) continue;
                 var write = (AttributeReference)_tr.GetObject(attId, OpenMode.ForWrite);
 
-                if (att.Tag.Equals("PART_NO", StringComparison.OrdinalIgnoreCase)) write.TextString = partNo;
-                else if (att.Tag.Equals("QTY", StringComparison.OrdinalIgnoreCase)) write.TextString = qty;
+                if (att.Tag.Equals(blocks.BomPartNumberTag, StringComparison.OrdinalIgnoreCase)) write.TextString = partNo;
+                else if (att.Tag.Equals(blocks.BomQuantityTag, StringComparison.OrdinalIgnoreCase)) write.TextString = qty;
             }
 
             if (partNo.Length > 0) written++;

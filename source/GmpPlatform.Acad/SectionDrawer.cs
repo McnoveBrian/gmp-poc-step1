@@ -1,5 +1,6 @@
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using GmpPlatform.Core.Settings;
 using GmpPlatform.Core.Tickets;
 
 namespace GmpPlatform.Acad;
@@ -11,6 +12,7 @@ namespace GmpPlatform.Acad;
 /// a section: the insulation is ANSI37 at scale 5 on layer INSULATION HATCH, titles are
 /// "SECTION &quot;A&quot;" in the Tindall style at width factor 0.725 and colour 4, and cut
 /// markers are the client's own dynamic SecCut_w_PlanDetail_TAG block carrying SEC#.
+/// Those names are the <see cref="StandardsProfile"/> defaults; a profile can rename them.
 /// </para>
 /// <para>
 /// Where to cut is a rule GMP has not given us. The rule used here — one section through
@@ -20,25 +22,27 @@ namespace GmpPlatform.Acad;
 /// </summary>
 internal sealed class SectionDrawer
 {
-    private const string LayerPanel = "PANEL";
-    private const string LayerInsulationHatch = "INSULATION HATCH";
-    private const string LayerText = "TEXT";
-    private const string LayerTags = "TAGS";
-    private const string LayerDims = "DIMENSIONS";
-    private const string MarkerBlock = "SecCut_w_PlanDetail_TAG";
     private const double SliceWidthIn = 30.0;   // length of panel shown either side of the cut
 
     private readonly Database _db;
     private readonly Transaction _tr;
     private readonly PieceTicket _ticket;
     private readonly DrawLog _log;
+    private readonly StandardsProfile _standards;
     private readonly Func<ObjectId> _textStyle;
     private readonly Func<ObjectId> _dimStyle;
     private readonly Action<Entity> _append;
     private readonly Func<string, short, string> _layer;
 
+    private string LayerPanel => _standards.Layers.Panel;
+    private string LayerInsulationHatch => _standards.Layers.InsulationHatch;
+    private string LayerText => _standards.Layers.Text;
+    private string LayerTags => _standards.Layers.Tags;
+    private string LayerDims => _standards.Layers.Dimensions;
+    private string MarkerBlock => _standards.Blocks.SectionMarker;
+
     public SectionDrawer(
-        Database db, Transaction tr, PieceTicket ticket, DrawLog log,
+        Database db, Transaction tr, PieceTicket ticket, DrawLog log, StandardsProfile standards,
         Func<ObjectId> textStyle, Func<ObjectId> dimStyle,
         Action<Entity> append, Func<string, short, string> layer)
     {
@@ -46,6 +50,7 @@ internal sealed class SectionDrawer
         _tr = tr;
         _ticket = ticket;
         _log = log;
+        _standards = standards;
         _textStyle = textStyle;
         _dimStyle = dimStyle;
         _append = append;
@@ -268,8 +273,8 @@ internal sealed class SectionDrawer
         {
             var hatch = new Hatch { Layer = _layer(LayerInsulationHatch, 7) };
             _append(hatch);
-            hatch.PatternScale = 5.0;
-            hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI37");
+            hatch.PatternScale = _standards.Styles.InsulationHatchScale;
+            hatch.SetHatchPattern(HatchPatternType.PreDefined, _standards.Styles.InsulationHatchPattern);
             hatch.Associative = false;
             hatch.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { boundary.ObjectId });
             hatch.EvaluateHatch(true);
@@ -315,7 +320,7 @@ internal sealed class SectionDrawer
                 Layer = _layer(LayerTags, 7)
             };
             _append(marker);
-            AddAttributes(marker, blockId, new Dictionary<string, string> { ["SEC#"] = cut.Letter });
+            AddAttributes(marker, blockId, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [_standards.Blocks.SectionMarkerLetterTag] = cut.Letter });
             placed++;
         }
 

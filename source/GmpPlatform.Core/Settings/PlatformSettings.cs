@@ -57,6 +57,14 @@ public sealed class PlatformSettings
     public bool PlotAfterDrawing { get; set; } = true;
 
     /// <summary>
+    /// The drafting standard (layer, style, block, attribute names and sheet wording) that
+    /// goes with <see cref="SeedDwgPath"/>. Left empty, <c>standards.json</c> beside this file
+    /// is used when present, otherwise the built-in Tindall standard. See
+    /// <see cref="StandardsProfile"/>.
+    /// </summary>
+    public string? StandardsProfilePath { get; set; }
+
+    /// <summary>
     /// Seed layout that carries the TIF (top-in-form) view, e.g. "1 of 3". Left empty, sheet
     /// roles follow the seed's tab order (see <c>SheetRoles</c>).
     /// </summary>
@@ -67,6 +75,13 @@ public sealed class PlatformSettings
 
     /// <summary>Seed layout that carries the sections. Empty: tab order.</summary>
     public string? SectionsLayoutName { get; set; }
+
+    /// <summary>
+    /// Draw rule-generated field reinforcement (bars, callouts, BOM rows) on the ticket. Off by
+    /// default: in Phase 1 the drafter adds reinforcement by hand, and rule-based reinforcement
+    /// is Phase 2 scope. Reinforcement modelled in Revit is unaffected.
+    /// </summary>
+    public bool DrawGeneratedRebar { get; set; }
 
     // ---- Ribbon ---------------------------------------------------------------
 

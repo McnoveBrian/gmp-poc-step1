@@ -1,6 +1,7 @@
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
+using GmpPlatform.Core.Settings;
 using GmpPlatform.Core.Tickets;
 
 namespace GmpPlatform.Acad;
@@ -63,10 +64,20 @@ public class TicketDrawCommands
 
             foreach (var warning in ticket.Warnings) log.Warn("from Revit: " + warning);
 
+            var settings = SettingsStore.Load();
+            if (SettingsStore.LastLoadError != null)
+                log.Warn($"settings could not be read ({SettingsStore.LastLoadError}); defaults used.");
+
+            var standards = StandardsStore.Load(settings);
+            if (StandardsStore.LastLoadError != null)
+                log.Warn($"standards profile could not be read ({StandardsStore.LastLoadError}); built-in standard used.");
+            log.Info($"standards: {standards.Name}" +
+                     (StandardsStore.LastLoadedFrom != null ? $" ({StandardsStore.LastLoadedFrom})" : ""));
+
             var db = HostApplicationServices.WorkingDatabase;
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                new TicketDrawer(db, tr, ticket, log).Draw();
+                new TicketDrawer(db, tr, ticket, log, settings, standards).Draw();
                 tr.Commit();
             }
 
