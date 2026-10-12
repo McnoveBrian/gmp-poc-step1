@@ -95,7 +95,7 @@ public static class RunReportWriter
         }
 
         sb.AppendLine($"<h2>Result</h2><pre>{Escape(result.Message)}</pre>");
-        sb.AppendLine($"<p><small>{Escape(plan.DemoNote)}</small></p>");
+        sb.AppendLine($"<p><small>{Escape(plan.ProductNote)}</small></p>");
         sb.AppendLine("</body></html>");
         return sb.ToString();
     }

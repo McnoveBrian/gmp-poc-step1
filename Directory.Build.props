@@ -6,6 +6,6 @@
     <Copyright>Copyright © GMP Architecture LLC</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>
     <LangVersion>latest</LangVersion>
-    <Version>0.1.0-demo</Version>
+    <Version>0.2.0</Version>
   </PropertyGroup>
 </Project>

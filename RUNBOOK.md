@@ -95,7 +95,7 @@ that is what they are there to stop.
 ```json
 {
   "SeedDwgPath":   "C:\\...\\45430_AFIP1035.dwg",
-  "FontMapPath":   "C:\\...\\gmp-poc-step1\\assets\\gmp.fmp",
+  "FontMapPath":   "C:\\...\\gmp-production-platform\\assets\\gmp.fmp",
   "PlotAfterDrawing": true
 }
 ```
@@ -109,7 +109,7 @@ that is what they are there to stop.
   first, then 2026 — `AcadRunner.SupportedReleases`) and never prefers a newer, unsupported
   2027 install. If only an unsupported release is present it still runs and says so.
 - `ShowDeveloperTools` (default `false`) adds a *Developer* panel with the retired *Wall
-  Ticket* route, *Export DWG* and *Verify*. **Leave it off on the demo machine**: *Verify*
+  Ticket* route, *Export DWG* and *Verify*. **Leave it off for client sessions**: *Verify*
   generates placeholder Revit sheets, and clicking it in front of a client puts them on screen.
 - `TifLayoutName`, `BifLayoutName`, `SectionsLayoutName` (optional) name the seed layouts that
   carry each sheet. Left out, the layouts are taken in **tab order**: the first two layouts with
@@ -163,8 +163,8 @@ that content is left out.
 
 ## 4. First Revit launch — clear the security prompt once
 
-The add-in is unsigned, so Revit asks about it. Do this **before** the demo, not during, and
-**again after every rebuild or update**:
+The add-in is unsigned, so Revit asks about it. Do this **before a client session**, not during,
+and **again after every rebuild or update**:
 
 1. Start Revit (each year separately).
 2. On **"Security — Unsigned Add-In"**, choose **Always Load**.
@@ -240,7 +240,7 @@ dotnet run -c Release -- <approved.full.json> <generated.full.json> <draw.log>
 ```
 
 `SheetCompare` also writes a stacked comparison and a red-on-grey overlay. **The overlay is the
-single most useful artefact for the demo** — the generated piece lies on top of the approved
+single most useful artefact for visual QA** — the generated piece lies on top of the approved
 one.
 
 Ink rewards drawing *something*; object counts reward drawing the right *number* of things.

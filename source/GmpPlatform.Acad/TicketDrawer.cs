@@ -1326,7 +1326,7 @@ internal sealed class TicketDrawer
     {
         // Every field is written, and any we could not resolve is written as "<?>" rather
         // than blank. A blank field reads as a broken tool; "<?>" reads as a question, and
-        // it is a question GMP can answer in one sentence at the demo.
+        // it is a question GMP can answer in one sentence.
         var id = _ticket.Identity;
         var tag = _standards.TitleBlock;
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)

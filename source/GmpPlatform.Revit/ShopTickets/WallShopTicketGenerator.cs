@@ -250,7 +250,7 @@ internal sealed class WallShopTicketGenerator
         var cellGap = Math.Max(_settings.SectionCellGapFt, 1.75);
         var noteGap = Math.Max(_settings.NoteClearanceFt, 1.25);
 
-        var sections = BuildDemoSectionSpecs(thickness);
+        var sections = BuildPlaceholderSectionSpecs(thickness);
         const int columns = 3; // fewer columns → larger cells, less crowding
         var cellWidth = Math.Max(thickness * 4.0, 2.5) + 2.0;  // includes callout gutter
         var cellHeight = Math.Max(thickness * 3.5, 2.0) + 2.2; // includes title + dim gutter
@@ -283,7 +283,7 @@ internal sealed class WallShopTicketGenerator
         DrawLabel(view, new XYZ(0, gridBottom - noteGap, 0), $"GMP · {_plan.RunId} · {sheetPlan.SheetNumber}");
     }
 
-    private static IReadOnlyList<SectionSpec> BuildDemoSectionSpecs(double thicknessFt)
+    private static IReadOnlyList<SectionSpec> BuildPlaceholderSectionSpecs(double thicknessFt)
     {
         var t = thicknessFt;
         return new[]

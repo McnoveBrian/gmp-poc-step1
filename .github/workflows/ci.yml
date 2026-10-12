@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore GmpPlatform.sln
+
+      - name: Test (Core)
+        run: >
+          dotnet test tests/GmpPlatform.Core.Tests/GmpPlatform.Core.Tests.csproj
+          -c Release --nologo --verbosity minimal
+
+      - name: Build Revit 2024 / 2025 / 2026
+        run: |
+          foreach ($c in 'Release.R24','Release.R25','Release.R26') {
+            Write-Host "== $c"
+            dotnet build GmpPlatform.sln -c $c -p:DeployAddin=false --nologo -v:minimal
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+        shell: pwsh

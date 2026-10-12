@@ -1,0 +1,11 @@
+{
+  "SeedDwgPath": "C:\\path\\to\\client-seed.dwg",
+  "FontMapPath": "C:\\path\\to\\gmp-production-platform\\assets\\gmp.fmp",
+  "PlotAfterDrawing": true,
+  "DrawGeneratedRebar": false,
+  "ShowDeveloperTools": false,
+  "TifLayoutName": "",
+  "BifLayoutName": "",
+  "SectionsLayoutName": "",
+  "StandardsProfilePath": ""
+}

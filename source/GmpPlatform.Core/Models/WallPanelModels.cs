@@ -61,9 +61,13 @@ public sealed class ShopTicketPlan
     public WallPanelSnapshot Panel { get; set; } = new();
     public IReadOnlyList<ShopTicketSheetPlan> Sheets { get; set; } = Array.Empty<ShopTicketSheetPlan>();
     public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
-    public string DemoNote { get; set; } =
-        "Demo build: creates a 3-sheet Revit package with drafting views, sample Detail Lines, " +
-        "and a section cut when possible. Full AFIP-style detailing comes in later iterations.";
+    /// <summary>
+    /// Note shown on HTML reports for the retired Revit-sheet route (Developer tools).
+    /// The production path is AutoCAD Ticket Drawing; this text must never imply otherwise.
+    /// </summary>
+    public string ProductNote { get; set; } =
+        "Developer route: 3-sheet Revit package with drafting views and placeholder Detail Lines. " +
+        "Production tickets are drawn in AutoCAD via Ticket Drawing.";
 }
 
 public sealed class ShopTicketRunResult

@@ -39,7 +39,7 @@ internal static class WallPanelReader
         if (!ok)
         {
             error =
-                $"Selected category '{element.Category?.Name}' is not supported in this demo. " +
+                $"Selected category '{element.Category?.Name}' is not supported. " +
                 "Select Structural Framing (wall panel) or a Wall.";
             return false;
         }

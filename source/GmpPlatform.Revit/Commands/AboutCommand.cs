@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Nice3point.Revit.Toolkit.External;
@@ -13,14 +14,23 @@ public class AboutCommand : ExternalCommand
     public override void Execute()
     {
         PlatformPaths.EnsureDirectories();
+
+        var asm = typeof(AboutCommand).Assembly;
+        var informational = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        var version = string.IsNullOrWhiteSpace(informational)
+            ? asm.GetName().Version?.ToString() ?? "?"
+            : informational.Split('+')[0];
+        var revitYear = UiApplication.Application.VersionNumber;
+
         TaskDialog.Show(
             "GMP Production Platform",
-            "GMP Production Platform — Demo 0.1.0\n\n" +
-            "Revit → shop ticket sheets → DWG export (demo framework)\n" +
-            "Target: Revit 2025 · C# / Revit API\n\n" +
+            $"GMP Production Platform {version}\n\n" +
+            "Revit → AutoCAD piece ticket (client seed DWG) → PDF\n" +
+            $"Running in Revit {revitYear}\n\n" +
             $"Data root:\n{PlatformPaths.Root}\n\n" +
-            "Select a wall panel, then use Shop Tickets → Wall Ticket.\n" +
-            "Use Shop Tickets → Settings to choose the sheet title block first.");
+            "Select a wall panel, then use Shop Tickets → Ticket Drawing.\n" +
+            "Use Shop Tickets → Settings to set the seed DWG and font map.");
     }
 }
 

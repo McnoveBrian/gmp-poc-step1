@@ -1,0 +1,64 @@
+{
+  "name": "Tindall (AFIP-1035 seed) - example",
+  "layers": {
+    "panel": "PANEL",
+    "dimensions": "DIMENSIONS",
+    "text": "TEXT",
+    "insert": "INSERT",
+    "insulation": "INSULATION",
+    "insulationHatch": "INSULATION HATCH",
+    "tags": "TAGS",
+    "derived": "GMP-DERIVED"
+  },
+  "styles": {
+    "dimension": "Tindall-4",
+    "text": "Tindall",
+    "insulationHatchPattern": "ANSI37",
+    "insulationHatchScale": 5.0
+  },
+  "blocks": {
+    "sectionMarker": "SecCut_w_PlanDetail_TAG",
+    "sectionMarkerLetterTag": "SEC#",
+    "rebar": "REBAR",
+    "titleBlockPrefix": "T_SHOP",
+    "bomRow": "T_S_BOM",
+    "bomPartNumberTag": "PART_NO",
+    "bomQuantityTag": "QTY"
+  },
+  "titleBlock": {
+    "mark": "MARK",
+    "pid": "PID",
+    "designNo": "DESNO",
+    "code": "CODE",
+    "jobNumber": "JOB_NO",
+    "project": "PROJECT",
+    "plant": "PLANT",
+    "drawnBy": "DRN",
+    "checkedBy": "CHK",
+    "projectLead": "PJ",
+    "engineerChecked": "ECHK",
+    "releasedForJobUse": "JOBUSE",
+    "revision": "REV",
+    "requiredCount": "REQ_NO",
+    "length": "LENGTH",
+    "width": "WIDTH",
+    "weight": "WT",
+    "releaseStrength": "REL",
+    "twentyEightDayStrength": "28DAY"
+  },
+  "labels": {
+    "tifView": "TIF VIEW",
+    "bifView": "BOTTOM FINISH LAYOUT \\U+2013 CONCRETE REMOVED",
+    "sifView": "SIF VIEW",
+    "startInsulation": "START INSUL.",
+    "solidZone": "SOLID ZONE",
+    "insulationPartNumber": "SNX100",
+    "startPanel": "START PANEL",
+    "stopPanel": "STOP PANEL",
+    "markEnd": "MARK END",
+    "openingPrefix": "B.O.-",
+    "openingColumnPrefix": "BLOCKOUT-",
+    "openingStart": "START",
+    "openingStop": "STOP"
+  }
+}

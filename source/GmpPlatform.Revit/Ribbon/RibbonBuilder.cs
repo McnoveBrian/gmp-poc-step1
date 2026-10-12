@@ -10,9 +10,8 @@ namespace GmpPlatform.Revit.Ribbon;
 /// <para>
 /// The default ribbon is the one a client sees: generate the ticket, set it up, get help.
 /// Development tools — the retired Revit-sheet route and the buttons that exist only to serve
-/// it — appear only when <see cref="PlatformSettings.ShowDeveloperTools"/> is on. A demo ribbon
-/// should not offer a second, weaker way to do the main job; a visitor who clicks it sees the
-/// weaker output and remembers that.
+/// it — appear only when <see cref="PlatformSettings.ShowDeveloperTools"/> is on. The product
+/// ribbon must not offer a second, weaker path; a visitor who clicks it sees placeholders.
 /// </para>
 /// </summary>
 internal static class RibbonBuilder

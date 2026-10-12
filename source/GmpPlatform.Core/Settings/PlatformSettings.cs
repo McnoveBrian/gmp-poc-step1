@@ -90,13 +90,12 @@ public sealed class PlatformSettings
     /// <b>Verify</b>. Off by default.
     /// <para>
     /// Wall Ticket is the earlier route that builds sheets inside Revit from drafting views and
-    /// placeholder text; it was retired from the demo because its output does not represent
-    /// the product, and the AutoCAD route (Ticket Drawing) is what produces the client's
-    /// ticket. Export DWG and Verify exist only to serve it — Verify generates those sheets, so
-    /// clicking it in front of a client would put placeholder drawings on screen. The commands
-    /// are kept rather than deleted: the client's model carries some seventy Revit ticket view
-    /// templates, and if their team produces tickets in Revit, a Revit route built on those
-    /// templates becomes Phase 1 scope.
+    /// placeholder text; it was retired from the product ribbon because its output does not
+    /// represent production tickets. The AutoCAD route (Ticket Drawing) is the supported path.
+    /// Export DWG and Verify exist only to serve the retired route — Verify generates those
+    /// sheets, so leaving this on in a client session would put placeholders on screen. The
+    /// commands are kept: the client's model carries Revit ticket view templates, and a Revit
+    /// route built on those templates may return as later scope.
     /// </para>
     /// </summary>
     public bool ShowDeveloperTools { get; set; }
